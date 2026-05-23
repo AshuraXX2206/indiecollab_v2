@@ -629,6 +629,15 @@ export default function AuthLanding({ onLoginSuccess, onGuestLogin }: AuthLandin
     setErrorMsg(null);
     setSuccessMsg(null);
     setIsSubmitLoading(true);
+
+    const isIframe = typeof window !== "undefined" && window.self !== window.top;
+    if (isIframe) {
+      setErrorMsg("Do chính sách bảo mật Iframe của Google AI Studio, bạn cần mở ứng dụng ở Tab Mới để đăng nhập bằng Google.");
+      setAuthErrorType("popup_blocked");
+      setIsSubmitLoading(false);
+      return;
+    }
+
     try {
       const res = await googleSignIn();
       if (res) {
@@ -687,6 +696,15 @@ export default function AuthLanding({ onLoginSuccess, onGuestLogin }: AuthLandin
     setErrorMsg(null);
     setSuccessMsg(null);
     setIsSubmitLoading(true);
+
+    const isIframe = typeof window !== "undefined" && window.self !== window.top;
+    if (isIframe) {
+      setErrorMsg("Do chính sách bảo mật Iframe của Google AI Studio, bạn cần mở ứng dụng ở Tab Mới để đăng nhập bằng GitHub.");
+      setAuthErrorType("popup_blocked");
+      setIsSubmitLoading(false);
+      return;
+    }
+
     try {
       const res = await githubSignIn();
       if (res) {

@@ -23,7 +23,7 @@ import {
   fetchRepoBranches, 
   fetchRepoPulls 
 } from "../../services/github";
-import { getAccessToken } from "../../firebase";
+import { auth } from "../../firebase";
 import { ProjectWorkspace, ProjectTask } from "../../types";
 
 interface GitHubIntegrationProps {
@@ -61,33 +61,34 @@ export default function GitHubIntegration({
     setErrorMsg(null);
 
     try {
-      const token = await getAccessToken();
-      if (!token) {
-        setErrorMsg("Vui lòng kết nối tài khoản GitHub bằng cách đăng nhập lại hoặc thiết lập trong cài đặt.");
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setErrorMsg("Vui lòng kết nối tài khoản bằng cách đăng nhập lại.");
         setIsLoading(false);
         return;
       }
 
-      const parsed = parseRepoUrl(workspace.githubRepoUrl);
-      if (!parsed) {
-        setErrorMsg("Định dạng URL GitHub không hợp lệ. Vui lòng nhập link chuẩn: https://github.com/owner/repo");
-        setIsLoading(false);
-        return;
+      const res = await fetch("/api/github/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ projectId: workspace.id })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: "Đồng bộ hóa thất bại." }));
+        throw new Error(errData.error || "Lỗi đồng bộ hóa.");
       }
 
-      const { owner, repo } = parsed;
-      const [commitsData, branchesData, pullsData] = await Promise.all([
-        fetchRepoCommits(token, owner, repo),
-        fetchRepoBranches(token, owner, repo),
-        fetchRepoPulls(token, owner, repo)
-      ]);
-
-      setCommits(commitsData);
-      setBranches(branchesData);
-      setPulls(pullsData);
-    } catch (err) {
+      const data = await res.json();
+      setCommits(data.commits || []);
+      setBranches(data.branches || []);
+      setPulls(data.pulls || []);
+    } catch (err: any) {
       console.warn("GitHub integration error:", err);
-      setErrorMsg("Không thể đồng bộ dữ liệu GitHub. Hãy kiểm tra quyền truy cập Token hoặc Repo.");
+      setErrorMsg(err.message || "Không thể đồng bộ dữ liệu GitHub. Hãy kiểm tra quyền truy cập Token hoặc Repo.");
     } finally {
       setIsLoading(false);
     }
@@ -107,15 +108,39 @@ export default function GitHubIntegration({
         return;
       }
 
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        throw new Error("Không thể liên kết: Vui lòng đăng nhập lại.");
+      }
+
       const formattedUrl = `https://github.com/${parsed.owner}/${parsed.repo}`;
+      
+      const linkRes = await fetch("/api/github/link-repo", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          projectId: workspace.id,
+          repoUrl: formattedUrl,
+          branch: "main"
+        })
+      });
+
+      if (!linkRes.ok) {
+        const errData = await linkRes.json().catch(() => ({ error: "Bác bỏ từ backend" }));
+        throw new Error(errData.error);
+      }
+
       await onUpdateWorkspace(workspace.id, {
         githubRepoUrl: formattedUrl,
         githubLinkedAt: new Date().toISOString(),
-        githubLinkedBy: "member"
+        githubLinkedBy: auth.currentUser?.displayName || "member"
       });
 
       if (onPostSysMessage) {
-        onPostSysMessage(`🔗 Kho mã nguồn GitHub đã được chỉnh sửa và liên kết với: ${formattedUrl}`);
+        onPostSysMessage(`🔗 Kho mã nguồn GitHub đã được chỉnh sửa và liên kết thành công với: ${formattedUrl}`);
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Tác vụ thất bại");

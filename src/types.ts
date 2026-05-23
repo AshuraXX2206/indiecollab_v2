@@ -431,6 +431,14 @@ export interface ProjectWorkspace {
   githubRepoUrl?: string;
   githubLinkedAt?: string;
   githubLinkedBy?: string;
+  discordWebhookUrl?: string;
+  discordWebhookEnabled?: boolean;
+  discordEvents?: string[];
+  googleLinked?: boolean;
+  googleLinkedAt?: string;
+  figmaUrl?: string;
+  youtubeUrl?: string;
+  steamAppId?: string;
   milestones?: WorkspaceMilestone[];
   pinnedMessageIds?: string[];
 }

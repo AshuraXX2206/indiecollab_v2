@@ -23,7 +23,8 @@ import {
   Award,
   Binary,
   Compass,
-  BookOpen
+  BookOpen,
+  Settings
 } from "lucide-react";
 import { db } from "../firebase";
 import { Project, ProjectGoal, ProjectTask, ProjectWorkspace, ProjectWorkspaceFile, User, WorkspaceMessage } from "../types";
@@ -37,6 +38,7 @@ import MilestoneTracker from "./workspace/MilestoneTracker";
 import AssetInteractiveHub from "./workspace/AssetInteractiveHub";
 import GuideHandbook from "./workspace/GuideHandbook";
 import GitHubRepoSyncModal from "./workspace/GitHubRepoSyncModal";
+import IntegrationsTab from "./workspace/IntegrationsTab";
 
 // Presence Hooks
 import { usePresence } from "../hooks/usePresence";
@@ -58,7 +60,7 @@ export default function ProjectWorkspaceView({
 }: ProjectWorkspaceProps) {
   // Navigation tabs state
   const [activeTab, setActiveTab] = useState<
-    "overview" | "kanban" | "goals" | "chat" | "github" | "milestones" | "files" | "members" | "assets_hub" | "tutorial"
+    "overview" | "kanban" | "goals" | "chat" | "github" | "milestones" | "files" | "members" | "assets_hub" | "tutorial" | "integrations"
   >("overview");
 
   // GitHub Sync Modal state
@@ -85,6 +87,7 @@ export default function ProjectWorkspaceView({
       case "members": return "Xem Đội ngũ";
       case "assets_hub": return "Duyệt Assets Họa Sĩ";
       case "tutorial": return "Sổ tay Hướng dẫn";
+      case "integrations": return "Hệ thống Tích hợp & Kết nối";
       default: return "Hợp tác sảnh";
     }
   };
@@ -207,6 +210,7 @@ export default function ProjectWorkspaceView({
             { id: "files", label: "Tài nguyên", Icon: FileText },
             { id: "members", label: "Hội viên", Icon: Users },
             { id: "tutorial", label: "Sổ tay HD", Icon: BookOpen },
+            { id: "integrations", label: "Tích hợp", Icon: Settings },
           ].map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -527,6 +531,17 @@ export default function ProjectWorkspaceView({
         {activeTab === "tutorial" && (
           <div className="mt-6 animation-fade-in">
             <GuideHandbook />
+          </div>
+        )}
+
+        {/* Ecosystem Integrations Tab */}
+        {activeTab === "integrations" && (
+          <div className="mt-6 animation-fade-in">
+            <IntegrationsTab 
+              workspace={workspace}
+              onUpdateWorkspace={onUpdateWorkspace}
+              onPostSysMessage={postSystemActivityMessage}
+            />
           </div>
         )}
       </div>

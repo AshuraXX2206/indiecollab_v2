@@ -16,6 +16,7 @@ import {
 import { parseRepoUrl } from "../../services/github";
 import { ProjectWorkspace } from "../../types";
 import { playClickSound, playSuccessSound, playErrorSound } from "../../utils/audio";
+import { auth } from "../../firebase";
 
 interface GitHubRepoSyncModalProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ export default function GitHubRepoSyncModal({
   onPostSysMessage
 }: GitHubRepoSyncModalProps) {
   const [repoUrl, setRepoUrl] = useState(workspace.githubRepoUrl || "");
+  const [personalAccessToken, setPersonalAccessToken] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -58,6 +60,7 @@ export default function GitHubRepoSyncModal({
   useEffect(() => {
     if (isOpen) {
       setRepoUrl(workspace.githubRepoUrl || "");
+      setPersonalAccessToken("");
       setValidationError(null);
       setIsSyncing(false);
       setProgress(0);
@@ -118,67 +121,110 @@ export default function GitHubRepoSyncModal({
     const formattedUrl = `https://github.com/${parsed.owner}/${parsed.repo}`;
 
     try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        throw new Error("Không tìm thấy thông tin đăng nhập của bạn. Vui lòng refresh hoặc re-login.");
+      }
+
       // Step 1: Analysing URL
       updateStepStatus(0, "running");
-      addLog(`Bắt đầu phân tích liên kết kho: ${formattedUrl}`);
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      addLog(`Phân tích URL kho phát triển: ${formattedUrl}`);
+      await new Promise((resolve) => setTimeout(resolve, 300));
       updateStepStatus(0, "success");
       setProgress(20);
       setCurrentStepIndex(1);
-      addLog(`Phân tích URL thành công: Chủ sở hữu="${parsed.owner}", Kho chứa="${parsed.repo}"`);
+      addLog(`Thành công! Phát hiện Owner="${parsed.owner}", Repo="${parsed.repo}".`);
 
-      // Step 2: Connecting Token
+      // Step 2: Secure Token linking via Backend API
       updateStepStatus(1, "running");
-      addLog("Kiểm tra mã xác thực sảnh trung gian...");
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      addLog("Gửi thông tin xác thực lên backend IndieCollab...");
+      
+      const linkRes = await fetch("/api/github/link-repo", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          projectId: workspace.id,
+          repoUrl: formattedUrl,
+          branch: "main",
+          personalAccessToken: personalAccessToken ? personalAccessToken.trim() : undefined
+        })
+      });
+
+      if (!linkRes.ok) {
+        const errData = await linkRes.json().catch(() => ({ error: "Bác bỏ từ backend" }));
+        throw new Error(`Xác thực backend thất bại: ${errData.error}`);
+      }
+
       updateStepStatus(1, "success");
       setProgress(40);
       setCurrentStepIndex(2);
-      addLog("Khởi tạo API credentials liên sảnh thành công.");
+      addLog(`Backend đã cấu hình lưu trữ mã bảo mật AES-256 an toàn.`);
 
-      // Step 3: Fetching Commits & Branches
+      // Step 3: Pull live Commits & Branches via proxy backend
       updateStepStatus(2, "running");
-      addLog("Đang kết nối cổng GitHub API quét nhanh lịch sử nhánh...");
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      addLog("Khởi chạy tiến trình kéo (Pulling) dữ liệu commits thông qua proxy backend...");
+      
+      const syncRes = await fetch("/api/github/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ projectId: workspace.id })
+      });
+
+      if (!syncRes.ok) {
+        const errData = await syncRes.json().catch(() => ({ error: "Không thể sync các commits" }));
+        throw new Error(`Đồng bộ commits thất bại: ${errData.error}`);
+      }
+
+      const syncData = await syncRes.json();
+      const commitsCount = syncData.commits?.length || 0;
       updateStepStatus(2, "success");
       setProgress(65);
       setCurrentStepIndex(3);
-      addLog("Đã đồng bộ nhánh chính (main/master) cùng 15 commits gần nhất.");
+      addLog(`Đồng bộ thành công! Tìm thấy ${commitsCount} commits mới nhất của nhánh.`);
 
-      // Step 4: Fetching Pull Requests
+      // Step 4: Process and count Pull Requests
       updateStepStatus(3, "running");
-      addLog("Kiểm tra danh sách Pull Requests chưa phê duyệt...");
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      addLog("Đồng bộ kéo thông tin Pull Requests trực tuyến...");
+      await new Promise((resolve) => setTimeout(resolve, 305));
+      
+      const pullsCount = syncData.pulls?.length || 0;
       updateStepStatus(3, "success");
       setProgress(85);
       setCurrentStepIndex(4);
-      addLog("Quét hoàn tất: Phát hiện 4 PR đang mở và sẵn sàng gán Kanban.");
+      addLog(`Thành công! Phát hiện ${pullsCount} Pull Requests liên quan trên sảnh.`);
 
-      // Step 5: Update Workspace inside Firebase Firestore
+      // Step 5: Save update state
       updateStepStatus(4, "running");
-      addLog("Đang lưu trữ dữ liệu liên kết trực tiếp vào Workspace...");
+      addLog("Cập nhật tọa hành trực tuyến Firestore...");
       
       await onUpdateWorkspace(workspace.id, {
         githubRepoUrl: formattedUrl,
         githubLinkedAt: new Date().toISOString(),
-        githubLinkedBy: "member"
+        githubLinkedBy: auth.currentUser?.displayName || "member"
       });
 
       if (onPostSysMessage) {
-        onPostSysMessage(`🔗 Sảnh vừa tích hợp cổng theo dõi GitHub nâng cao: ${formattedUrl}`);
+        onPostSysMessage(`🔗 Tải liên kết kho mã nguồn mượt mà: ${formattedUrl} (Dữ liệu commits/PRs kéo trực tiếp từ backend)`);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
       updateStepStatus(4, "success");
       setProgress(100);
       setSyncSuccess(true);
-      addLog("Chúc mừng! Đồng bộ kho dữ liệu hoàn thành xuất sắc.");
-
+      addLog("Chúc mừng! Toàn bộ kho mã nguồn và dữ liệu Git đã được liên thông hoàn toàn.");
       playSuccessSound();
+
     } catch (err: any) {
       playErrorSound();
-      addLog(`[LỖI] Tiến trình thất bại: ${err.message || "Tác vụ không mong muốn"}`);
-      updateStepStatus(currentStepIndex, "failed");
+      addLog(`[LỖI TIẾN TRÌNH] ${err.message || "Tác vụ thất bại"}`);
+      setSteps((prev) => 
+        prev.map((step) => step.status === "running" ? { ...step, status: "failed" } : step)
+      );
     } finally {
       setIsSyncing(false);
     }
@@ -242,6 +288,23 @@ export default function GitHubRepoSyncModal({
                   <Check className="h-4 w-4" /> Định dạng URL hợp lệ. Sẵn sàng tích hợp.
                 </div>
               )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono mb-2 flex items-center justify-between">
+                <span>GitHub Personal Access Token (Tùy chọn)</span>
+                <span className="text-[10px] text-indigo-400 lowercase normal-case font-sans">Sẽ được bảo mật & mã hóa AES-256</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  value={personalAccessToken}
+                  onChange={(e) => setPersonalAccessToken(e.target.value)}
+                  disabled={isSyncing}
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxx (Nếu là repository Riêng tư / Private)"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs text-white outline-none focus:border-indigo-500/80 transition font-mono"
+                />
+              </div>
             </div>
 
             {/* Simulated/Real explanation detail card */}

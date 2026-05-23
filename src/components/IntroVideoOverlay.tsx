@@ -1550,31 +1550,45 @@ export const IntroVideoOverlay: React.FC<IntroVideoOverlayProps> = ({ onClose })
         isFading ? "pointer-events-none" : ""
       }`}
     >
-      {/* Holographic Cursor Aura */}
+      {/* Reworked Visual Cursor Effect (No hard outer ring circle) */}
+      {/* Layer 1: Large premium ambient background flare */}
       <div 
-        className="pointer-events-none fixed z-[99999] rounded-full blur-2xl opacity-25"
+        className="pointer-events-none fixed z-[99999] rounded-full blur-3xl opacity-35 mix-blend-screen transition-all duration-500 ease-out"
         style={{
           left: mousePos.x,
           top: mousePos.y,
-          width: 130,
-          height: 130,
+          width: 320,
+          height: 320,
           transform: "translate(-50%, -50%)",
-          background: `radial-gradient(circle, ${scene.accentColor} 0%, transparent 70%)`
+          background: `radial-gradient(circle, ${scene.accentColor} 0%, rgba(15, 23, 42, 0) 70%)`
+        }}
+      />
+
+      {/* Layer 2: Soft high-intensity focus light glow */}
+      <div 
+        className="pointer-events-none fixed z-[99999] rounded-full blur-md opacity-60 mix-blend-initial transition-all duration-100 ease-out"
+        style={{
+          left: mousePos.x,
+          top: mousePos.y,
+          width: 48,
+          height: 48,
+          transform: "translate(-50%, -50%)",
+          background: `radial-gradient(circle, ${scene.accentColor} 0%, rgba(255, 255, 255, 0.4) 30%, transparent 80%)`,
+          boxShadow: `0 0 35px 4px ${scene.accentColor}`
         }}
       />
       
-      {/* Target Cursor ring */}
+      {/* Layer 3: Ultra-precise glowing white core locator */}
       <div 
-        className="pointer-events-none fixed z-[99999] rounded-full border transition-all duration-75 ease-out"
+        className="pointer-events-none fixed z-[99999] rounded-full mix-blend-screen"
         style={{
           left: mousePos.x,
           top: mousePos.y,
-          width: 28,
-          height: 28,
+          width: 8,
+          height: 8,
           transform: "translate(-50%, -50%)",
-          borderColor: scene.accentColor,
-          opacity: 0.8,
-          boxShadow: `0 0 10px ${scene.accentColor}`
+          background: "#ffffff",
+          boxShadow: `0 0 14px 4px #ffffff, 0 0 28px 8px ${scene.accentColor}`
         }}
       />
 

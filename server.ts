@@ -12,6 +12,7 @@ import { createLearnHubAdminRouter } from "./src/server/learnHubAdminRoutes";
 import { createAiCoreRouter } from "./src/server/aiCoreRoutes";
 import { getUserGeminiClient } from "./src/server/aiCoreGateway";
 import { runLearningDiscoveryCycle } from "./src/server/discoveryWorker";
+import { encryptText, decryptText } from "./src/server/cryptoUtils";
 
 dotenv.config();
 
@@ -1752,6 +1753,332 @@ app.delete("/api/admin/clean-users", async (req, res) => {
     console.error("[Admin] Clean users error:", e);
     writeAuditLog(ip, "ADMIN_CLEAN_ERROR", "admin", e.message, "WARN");
     res.status(500).json({ error: "Failed to clean user data: " + e.message });
+  }
+});
+
+// -------------------------------------------------------------
+// SECURE GITHUB SYNCHRONIZATION BACKEND ENDPOINTS
+// -------------------------------------------------------------
+
+// Helper URL parser in backend
+function parseGithubUrl(url: string) {
+  const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+  if (!match) return null;
+  return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
+}
+
+// 1. Link a GitHub Repo securely
+app.post("/api/github/link-repo", async (req, res) => {
+  const ip = req.ip || "127.0.0.1";
+  const verifiedUser = await verifyAuthToken(req);
+  if (!verifiedUser) {
+    writeAuditLog(ip, "GITHUB_LINK_UNAUTHORIZED", "unknown", "Attempted to link GitHub repo without auth.", "BLOCKED");
+    return res.status(401).json({ error: "Yêu cầu đăng nhập để liên kết repository." });
+  }
+
+  const { projectId, repoUrl, branch, personalAccessToken } = req.body;
+  if (!projectId || !repoUrl) {
+    return res.status(400).json({ error: "Thiếu projectId hoặc repoUrl." });
+  }
+
+  const parsed = parseGithubUrl(repoUrl);
+  if (!parsed) {
+    return res.status(400).json({ error: "Định dạng URL GitHub không hợp lệ." });
+  }
+
+  try {
+    const firestore = firestoreDb;
+    const workspaceDoc = await firestore.collection("project_workspaces").doc(projectId).get();
+    if (!workspaceDoc.exists) {
+      return res.status(404).json({ error: "Không tìm thấy dự án không gian tương ứng." });
+    }
+
+    const workspaceData = workspaceDoc.data() || {};
+    const isMember = workspaceData.ownerId === verifiedUser || (workspaceData.memberIds || []).includes(verifiedUser);
+    if (!isMember) {
+      return res.status(403).json({ error: "Bạn không có quyền quản lý tích hợp của dự án này." });
+    }
+
+    const linkedBranch = branch || "main";
+    const encryptedToken = personalAccessToken ? encryptText(personalAccessToken.trim()) : null;
+
+    // Save configuration in the secure collection "project_integrations"
+    await firestore.collection("project_integrations").doc(projectId).set({
+      projectId,
+      githubRepo: {
+        owner: parsed.owner,
+        repoName: parsed.repo,
+        linkedBranch,
+        url: `https://github.com/${parsed.owner}/${parsed.repo}`
+      },
+      encryptedToken,
+      updatedBy: verifiedUser,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+
+    // Update public metadata on project_workspaces
+    await firestore.collection("project_workspaces").doc(projectId).update({
+      githubRepoUrl: `https://github.com/${parsed.owner}/${parsed.repo}`,
+      githubLinkedAt: new Date().toISOString(),
+      githubLinkedBy: verifiedUser
+    });
+
+    writeAuditLog(ip, "GITHUB_LINK_SUCCESS", verifiedUser, `Linked repo ${parsed.owner}/${parsed.repo} for project ${projectId}. IsTokenProvided=${!!personalAccessToken}`);
+
+    res.json({
+      success: true,
+      message: "Liên kết kho mã nguồn thành công và mã bảo mật được lưu trữ an toàn phía backend.",
+      repo: {
+        owner: parsed.owner,
+        repoName: parsed.repo,
+        branch: linkedBranch
+      }
+    });
+  } catch (err: any) {
+    console.error("[GitHub Backend] Error linking repo:", err);
+    res.status(500).json({ error: "Lỗi liên kết: " + err.message });
+  }
+});
+
+// 2. Fetch Commits and Pull Requests from GitHub via Secure Backend Proxy
+app.post("/api/github/sync", async (req, res) => {
+  const ip = req.ip || "127.0.0.1";
+  const verifiedUser = await verifyAuthToken(req);
+  if (!verifiedUser) {
+    return res.status(401).json({ error: "Vui lòng đăng nhập để đồng bộ dữ liệu." });
+  }
+
+  const { projectId } = req.body;
+  if (!projectId) {
+    return res.status(400).json({ error: "Thiếu projectId." });
+  }
+
+  try {
+    const firestore = firestoreDb;
+    const workspaceDoc = await firestore.collection("project_workspaces").doc(projectId).get();
+    if (!workspaceDoc.exists) {
+      return res.status(404).json({ error: "Không tìm thấy dự án không gian tương ứng." });
+    }
+
+    const workspaceData = workspaceDoc.data() || {};
+    const isMember = workspaceData.ownerId === verifiedUser || (workspaceData.memberIds || []).includes(verifiedUser);
+    if (!isMember) {
+      return res.status(403).json({ error: "Bạn không có quyền truy cập dữ liệu của dự án này." });
+    }
+
+    // Retrieve secret token from secure collection
+    const integrationDoc = await firestore.collection("project_integrations").doc(projectId).get();
+    let token: string | null = null;
+    let githubRepo: any = null;
+
+    if (integrationDoc.exists) {
+      const integrationData = integrationDoc.data() || {};
+      githubRepo = integrationData.githubRepo;
+      if (integrationData.encryptedToken) {
+        try {
+          token = decryptText(integrationData.encryptedToken);
+        } catch (decErr) {
+          console.error("[GitHub Backend] Token decryption failed:", decErr);
+        }
+      }
+    }
+
+    if (!githubRepo && workspaceData.githubRepoUrl) {
+      const parsed = parseGithubUrl(workspaceData.githubRepoUrl);
+      if (parsed) {
+        githubRepo = {
+          owner: parsed.owner,
+          repoName: parsed.repo,
+          linkedBranch: "main"
+        };
+      }
+    }
+
+    if (!githubRepo) {
+      return res.status(400).json({ error: "Dự án chưa được liên kết với repository GitHub." });
+    }
+
+    const { owner, repoName, linkedBranch } = githubRepo;
+    const headers: Record<string, string> = {
+      "Accept": "application/vnd.github.v3+json",
+      "User-Agent": "IndieCollab-Backend-Agent"
+    };
+
+    if (token) {
+      headers["Authorization"] = `token ${token}`;
+    } else if (process.env.GITHUB_FALLBACK_TOKEN) {
+      headers["Authorization"] = `token ${process.env.GITHUB_FALLBACK_TOKEN}`;
+    }
+
+    const commitsUrl = `https://api.github.com/repos/${owner}/${repoName}/commits?sha=${linkedBranch}&per_page=15`;
+    const pullsUrl = `https://api.github.com/repos/${owner}/${repoName}/pulls?state=all&per_page=15`;
+    const branchesUrl = `https://api.github.com/repos/${owner}/${repoName}/branches?per_page=20`;
+
+    const [_commitsRes, _pullsRes, _branchesRes] = await Promise.all([
+      fetch(commitsUrl, { headers }).catch(() => null),
+      fetch(pullsUrl, { headers }).catch(() => null),
+      fetch(branchesUrl, { headers }).catch(() => null),
+    ]);
+
+    let commits: any[] = [];
+    let pulls: any[] = [];
+    let branches: any[] = [];
+
+    if (_commitsRes && _commitsRes.ok) {
+      commits = await _commitsRes.json();
+    } else if (_commitsRes) {
+      console.warn(`[GitHub Backend] Commits fetch status: ${_commitsRes.status}`);
+    }
+
+    if (_pullsRes && _pullsRes.ok) {
+      pulls = await _pullsRes.json();
+    }
+
+    if (_branchesRes && _branchesRes.ok) {
+      branches = await _branchesRes.json();
+    }
+
+    res.json({
+      success: true,
+      commits: commits.map(c => ({
+        sha: c.sha,
+        commit: {
+          message: c.commit?.message || "",
+          author: {
+            name: c.commit?.author?.name || "Unknown",
+            email: c.commit?.author?.email || "",
+            date: c.commit?.author?.date || ""
+          }
+        },
+        author: c.author ? {
+          login: c.author.login,
+          avatar_url: c.author.avatar_url
+        } : null,
+        html_url: c.html_url
+      })),
+      pulls: pulls.map(p => ({
+        id: p.id,
+        number: p.number,
+        title: p.title,
+        state: p.state,
+        merged: !!p.merged_at,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+        closed_at: p.closed_at,
+        merged_at: p.merged_at,
+        html_url: p.html_url,
+        user: {
+          login: p.user?.login || "anonymous",
+          avatar_url: p.user?.avatar_url || "https://api.dicebear.com/7.x/bottts/svg"
+        }
+      })),
+      branches: branches.map(b => ({ name: b.name }))
+    });
+
+  } catch (err: any) {
+    console.error("[GitHub Backend] Sync error:", err);
+    res.status(500).json({ error: "Lỗi đồng bộ hóa dữ liệu thông qua backend: " + err.message });
+  }
+});
+
+// 3. Webhook receiver for GitHub App Actions Events
+app.post("/api/webhooks/github", async (req, res) => {
+  const ip = req.ip || "127.0.0.1";
+  const signature = req.headers["x-hub-signature-256"];
+  const event = req.headers["x-github-event"];
+
+  console.log(`[GitHub Webhook] Received event: "${event}"`);
+
+  const payload = req.body;
+  if (!payload || !payload.repository) {
+    return res.status(400).json({ error: "Payload rỗng." });
+  }
+
+  try {
+    const firestore = firestoreDb;
+    const repoFullName = payload.repository.full_name;
+
+    const workspacesSnapshot = await firestore
+      .collection("project_workspaces")
+      .where("githubRepoUrl", "==", `https://github.com/${repoFullName}`)
+      .get();
+
+    if (workspacesSnapshot.empty) {
+      console.log(`[GitHub Webhook] No workspace linked to repo: ${repoFullName}`);
+      return res.json({ success: true, message: "No active workspace mapping found." });
+    }
+
+    if (event === "pull_request" && payload.action === "closed" && payload.pull_request?.merged) {
+      const pr = payload.pull_request;
+      const ghUsername = pr.user.login;
+
+      const usersSnapshot = await firestore
+        .collection("users")
+        .where("githubUsername", "==", ghUsername)
+        .get();
+
+      let matchedUserId = "unknown";
+      let matchedUserName = pr.user.login;
+
+      if (!usersSnapshot.empty) {
+        const matchedUserDoc = usersSnapshot.docs[0];
+        matchedUserId = matchedUserDoc.id;
+        matchedUserName = matchedUserDoc.data().displayName || pr.user.login;
+      }
+
+      for (const workspaceDoc of workspacesSnapshot.docs) {
+        const workspaceId = workspaceDoc.id;
+        const workspaceData = workspaceDoc.data();
+
+        const evidenceId = "evidence-gh-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+        await firestore.collection("contribution_evidences").doc(evidenceId).set({
+          id: evidenceId,
+          userId: matchedUserId,
+          projectId: workspaceId,
+          workspaceTitle: workspaceData.projectTitle || "Project",
+          source: "github",
+          evidenceType: "pr_merged",
+          title: `Merged PR #${pr.number}: ${pr.title}`,
+          externalUrl: pr.html_url,
+          status: matchedUserId !== "unknown" ? "INSTANT_VERIFIED" : "PENDING_OWNER_APPROVAL",
+          verifiedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          metrics: {
+            linesAdded: pr.additions || 0,
+            linesDeleted: pr.deletions || 0,
+            filesChanged: pr.changed_files || 0
+          },
+          customDescription: `GitHub PR #${pr.number} merged by ${ghUsername}.`
+        });
+
+        const id = "sysmsg-webhook-" + Date.now();
+        const systemMessage = {
+          id,
+          channelId: "general",
+          senderId: "system",
+          senderName: "Hệ thống liên thông",
+          senderAvatar: "https://api.dicebear.com/7.x/bottts/svg?seed=sys",
+          content: `🌿 **[GitHub App]** Pull Request **#${pr.number}: ${pr.title}** vừa được merged xuất sắc bởi **${ghUsername}** (${matchedUserName})!`,
+          type: "system",
+          createdAt: new Date().toISOString()
+        };
+
+        await firestore
+          .collection("project_workspaces")
+          .doc(workspaceId)
+          .collection("channels")
+          .doc("general")
+          .collection("messages")
+          .doc(id)
+          .set(systemMessage);
+      }
+    }
+
+    res.json({ success: true, processedWorkspaces: workspacesSnapshot.size });
+
+  } catch (err: any) {
+    console.error("[GitHub Webhook] Processing error:", err);
+    res.status(500).json({ error: "Lỗi xử lý webhook: " + err.message });
   }
 });
 
