@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import LanguageSelector from "./LanguageSelector";
 import { navigateToPath } from "../App";
+import HowItWorksSection from "./HowItWorksSection";
 
 // Hacker Background — multi-pane terminal scene, scanlines, matrix rain
 // ============================================================================
@@ -1337,44 +1338,15 @@ export default function AuthLanding({ onLoginSuccess, onGuestLogin }: AuthLandin
             SECTION 3: HOW IT WORKS — Simple 3-step flow
             Psychological purpose: reduce friction, make it feel easy
             ================================================================ */}
-        <section id="how-it-works" className="w-full border-t border-white/[0.04]">
-          <div className="max-w-4xl mx-auto px-6 py-20 md:py-28">
-            <div className="text-center mb-14 space-y-3">
-              <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">From solo to team in 3 steps</h2>
-              <p className="text-slate-400 text-base">No lengthy onboarding. Start collaborating in minutes.</p>
+        <section id="how-it-works" className="w-full border-t border-white/[0.04]" style={{ background: "radial-gradient(ellipse at bottom, rgba(99,102,241,0.03) 0%, transparent 60%)" }}>
+          <div className="max-w-5xl mx-auto px-6 py-20 md:py-28">
+            <div className="text-center mb-10 space-y-3">
+              <span className="px-3 py-1 text-[10px] font-mono tracking-widest text-indigo-400 bg-indigo-500/10 rounded-full border border-indigo-500/15 uppercase font-bold">Cơ chế vận hành</span>
+              <h2 className="text-3xl sm:text-4xl font-semibold text-white tracking-tight">Hành trình lập đội & phát hành qua 3 bước</h2>
+              <p className="text-slate-400 text-sm max-w-xl mx-auto">Không còn làm việc cô rực. Hãy tham gia sảnh chơi tương tác để cảm nhận cách thức kết nối tự động.</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {[
-                {
-                  step: "01",
-                  title: "Create your profile",
-                  desc: "Set your skills, tools, and what you're looking for. Takes 30 seconds.",
-                  icon: <UserCheck className="h-5 w-5" />
-                },
-                {
-                  step: "02",
-                  title: "Post or discover projects",
-                  desc: "Browse open roles or post your own project to attract the right people.",
-                  icon: <Search className="h-5 w-5" />
-                },
-                {
-                  step: "03",
-                  title: "Build & ship together",
-                  desc: "Chat, share assets, track bounties, and push your game to release.",
-                  icon: <Workflow className="h-5 w-5" />
-                }
-              ].map((item, i) => (
-                <div key={i} className="text-center space-y-4">
-                  <div className="mx-auto w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/15 flex items-center justify-center text-indigo-400">
-                    {item.icon}
-                  </div>
-                  <div className="text-[11px] font-mono text-indigo-400 font-bold tracking-widest">{item.step}</div>
-                  <h3 className="text-lg font-bold text-white">{item.title}</h3>
-                  <p className="text-sm text-slate-400 leading-relaxed">{item.desc}</p>
-                </div>
-              ))}
-            </div>
+            <HowItWorksSection />
           </div>
         </section>
 
