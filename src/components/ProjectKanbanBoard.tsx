@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { motion } from "motion/react";
 import { Project, ProjectTask, TaskComment } from "../types";
 import { 
   Plus, 
@@ -551,6 +552,37 @@ export default function ProjectKanbanBoard({ project, currentUser, onUpdateProje
           </button>
         )}
       </div>
+
+      {/* Dynamic Task Progress Bar with spring animation */}
+      {(() => {
+        const total = tasks.length;
+        const completed = tasks.filter(t => t.status === "Completed").length;
+        const ratio = total > 0 ? Math.round((completed / total) * 100) : 0;
+        return (
+          <div className="rounded-xl border border-slate-850/60 bg-slate-950/25 p-3.5 space-y-2">
+            <div className="flex justify-between items-center text-[10px] font-mono leading-none">
+              <span className="text-slate-500 font-bold uppercase tracking-wider">Tiến Độ Dự Án ({completed}/{total} Hoàn Thành)</span>
+              <span className="font-bold text-indigo-400">{ratio}%</span>
+            </div>
+            <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-850/60 relative">
+              <motion.div
+                className="h-full bg-indigo-500 rounded-full relative"
+                initial={{ width: 0 }}
+                animate={{ width: `${ratio}%` }}
+                transition={{ type: "spring", stiffness: 60, damping: 12 }}
+              >
+                {ratio > 0 && (
+                  <motion.span
+                    className="absolute right-0 top-0 bottom-0 w-2.5 bg-white/40 blur-[1px] rounded-full"
+                    animate={{ opacity: [0.3, 0.8, 0.3] }}
+                    transition={{ repeat: Infinity, duration: 1.5 }}
+                  />
+                )}
+              </motion.div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Add Task Form modal/inline */}
       {showAddTask && (

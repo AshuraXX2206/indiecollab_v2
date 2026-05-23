@@ -274,8 +274,12 @@ service cloud.firestore {
           allow read: if isWorkspaceMember(projectId);
           allow create: if isWorkspaceMember(projectId)
             && request.resource.data.id == msgId
-            && request.resource.data.senderId == uid()
-            && (!exists(/databases/$(database)/documents/project_workspaces/$(projectId)/channels/$(channelId)/rate_limit/$(uid())) || request.time > get(/databases/$(database)/documents/project_workspaces/$(projectId)/channels/$(channelId)/rate_limit/$(uid())).data.lastSent + duration.value(2, 's'));
+            && (request.resource.data.senderId == uid() || request.resource.data.senderId == 'system')
+            && (
+              request.resource.data.senderId == 'system'
+              || !exists(/databases/$(database)/documents/project_workspaces/$(projectId)/channels/$(channelId)/rate_limit/$(uid()))
+              || request.time > get(/databases/$(database)/documents/project_workspaces/$(projectId)/channels/$(channelId)/rate_limit/$(uid())).data.lastSent + duration.value(2, 's')
+            );
           allow update: if isWorkspaceMember(projectId)
             && resource.data.senderId == uid();
           allow delete: if isWorkspaceMember(projectId)

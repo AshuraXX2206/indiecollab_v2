@@ -226,11 +226,34 @@ const ParticleCanvas: React.FC<{ color: string; intensity?: number }> = ({ color
       animationRef.current = requestAnimationFrame(animate);
     };
 
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      // Spawn sparkly trailing particles under user cursor
+      for (let i = 0; i < 3; i++) {
+        particlesRef.current.push({
+          x,
+          y,
+          vx: (Math.random() - 0.5) * 2.5,
+          vy: (Math.random() - 0.5) * 2.5 - 0.2,
+          life: 1.0,
+          maxLife: 0.4 + Math.random() * 0.4,
+          size: 1.2 + Math.random() * 2,
+          color,
+          type: 'spark'
+        });
+      }
+    };
+
     animate();
+    window.addEventListener("mousemove", handleMouseMove);
 
     return () => {
       cancelAnimationFrame(animationRef.current!);
       window.removeEventListener("resize", resize);
+      window.removeEventListener("mousemove", handleMouseMove);
     };
   }, [color, intensity]);
 
@@ -1422,6 +1445,16 @@ export const IntroVideoOverlay: React.FC<IntroVideoOverlayProps> = ({ onClose })
   const [sceneTransition, setSceneTransition] = useState(false);
   const [sceneProgress, setSceneProgress] = useState(0);
   const [showProceedButton, setShowProceedButton] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: -250, y: -250 });
+  
+  useEffect(() => {
+    const handleMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener("mousemove", handleMove);
+    return () => window.removeEventListener("mousemove", handleMove);
+  }, []);
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const progressRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -1513,10 +1546,38 @@ export const IntroVideoOverlay: React.FC<IntroVideoOverlayProps> = ({ onClose })
       animate={{ opacity: isFading ? 0 : 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.7, ease: "easeOut" }}
-      className={`fixed inset-0 z-[100000] flex flex-col bg-slate-950 text-slate-100 overflow-hidden select-none ${
+      className={`fixed inset-0 z-[100000] flex flex-col bg-slate-950 text-slate-100 overflow-hidden select-none cursor-none ${
         isFading ? "pointer-events-none" : ""
       }`}
     >
+      {/* Holographic Cursor Aura */}
+      <div 
+        className="pointer-events-none fixed z-[99999] rounded-full blur-2xl opacity-25"
+        style={{
+          left: mousePos.x,
+          top: mousePos.y,
+          width: 130,
+          height: 130,
+          transform: "translate(-50%, -50%)",
+          background: `radial-gradient(circle, ${scene.accentColor} 0%, transparent 70%)`
+        }}
+      />
+      
+      {/* Target Cursor ring */}
+      <div 
+        className="pointer-events-none fixed z-[99999] rounded-full border transition-all duration-75 ease-out"
+        style={{
+          left: mousePos.x,
+          top: mousePos.y,
+          width: 28,
+          height: 28,
+          transform: "translate(-50%, -50%)",
+          borderColor: scene.accentColor,
+          opacity: 0.8,
+          boxShadow: `0 0 10px ${scene.accentColor}`
+        }}
+      />
+
       {/* AAA Cinematic Background Effects */}
       <ParticleCanvas color={scene.accentColor} intensity={scene.visualType === "game" ? 1.5 : 1} />
       <ScanLines />

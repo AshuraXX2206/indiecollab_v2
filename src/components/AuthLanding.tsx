@@ -1039,15 +1039,27 @@ export default function AuthLanding({ onLoginSuccess, onGuestLogin }: AuthLandin
                     <ShieldAlert className="h-4 w-4 shrink-0" />
                     <span>Lỗi chặn cửa sổ đăng nhập / cookies bên thứ ba</span>
                   </div>
-                  <div className="space-y-2 text-[11.5px] leading-relaxed border-t border-white/[0.05] pt-2 mt-2">
+                  <div className="space-y-3 text-[11.5px] leading-relaxed border-t border-white/[0.05] pt-2 mt-2">
                     <p>
-                      Trình duyệt đang chặn cửa sổ đăng nhập mở ra dưới dạng popup, hoặc chính sách cookie bên thứ ba đang hạn chế hoạt động của Firebase Auth bên dưới Iframe.
+                      Cửa sổ đăng nhập bị trình duyệt chặn (hoặc chính sách cookie gốc đang hạn chế giao dịch bảo mật của Authentication bên dưới khung xem trước Iframe của AI Studio).
                     </p>
-                    <p className="font-bold text-blue-300">Cách sửa đổi nhanh nhất:</p>
+                    
+                    <div className="py-1">
+                      <button
+                        type="button"
+                        onClick={() => window.open(window.location.href, "_blank")}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 px-4 py-2 text-xs font-bold text-white transition cursor-pointer select-none"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Mở cổng ứng dụng ở Tab Mới
+                      </button>
+                    </div>
+
+                    <p className="font-bold text-blue-300">Hoặc khắc phục bằng một số cách sau:</p>
                     <ul className="list-disc pl-4.5 space-y-1 text-slate-300">
-                      <li>Nhấp vào nút <strong>Mở trong tab mới (Open in new tab)</strong> ở góc trên bên phải khung xem trước của Google AI Studio để mở ứng dụng ở chế độ toàn màn hình chính thức.</li>
-                      <li>Cho phép hiển thị Popup từ trang web này trên thanh địa chỉ của trình duyệt.</li>
-                      <li>Nếu vẫn không thể đăng nhập, bạn có thể chuyển qua tab <strong>Sign In / Register (Email)</strong> hoặc sử dụng chức năng <strong>Try as Guest (Đăng nhập Khách)</strong> để kiểm nghiệm ứng dụng một cách hoàn chỉnh.</li>
+                      <li>Nhấp vào nút <strong className="text-white">Mở trong tab mới (Open in new tab)</strong> ở góc trên bên phải thanh công cụ AI Studio.</li>
+                      <li>Ủy quyền hiển thị cửa sổ con (Popup) của trang này trên trình duyệt của bạn.</li>
+                      <li>Chuyển sang tab <strong className="text-white">Sign In / Register</strong> bằng Email hoặc nhấp chọn <strong className="text-white">Try as Guest (Khách)</strong> bên dưới để dùng thử nhanh.</li>
                     </ul>
                   </div>
                 </div>

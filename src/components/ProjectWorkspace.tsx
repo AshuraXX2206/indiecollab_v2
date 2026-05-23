@@ -36,6 +36,7 @@ import GitHubAdvancedPipeline from "./workspace/GitHubAdvancedPipeline";
 import MilestoneTracker from "./workspace/MilestoneTracker";
 import AssetInteractiveHub from "./workspace/AssetInteractiveHub";
 import GuideHandbook from "./workspace/GuideHandbook";
+import GitHubRepoSyncModal from "./workspace/GitHubRepoSyncModal";
 
 // Presence Hooks
 import { usePresence } from "../hooks/usePresence";
@@ -59,6 +60,9 @@ export default function ProjectWorkspaceView({
   const [activeTab, setActiveTab] = useState<
     "overview" | "kanban" | "goals" | "chat" | "github" | "milestones" | "files" | "members" | "assets_hub" | "tutorial"
   >("overview");
+
+  // GitHub Sync Modal state
+  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
 
   const [fileName, setFileName] = useState("");
   const [fileUrl, setFileUrl] = useState("");
@@ -176,8 +180,17 @@ export default function ProjectWorkspaceView({
             <h1 className="text-xl font-black text-white">Không Gian Làm Việc: {workspace.projectTitle || project.title}</h1>
             <p className="mt-1 text-xs text-slate-500">Chỉ chủ dự án và thành viên được duyệt mới lọc/đồng bộ được nội dung từ không gian.</p>
           </div>
-          <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 px-4 py-2 text-xs font-bold text-indigo-200">
-            {workspace.memberIds.length} thành viên
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setIsGitHubModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-500/30 bg-indigo-950/40 px-3.5 py-2 text-xs font-bold text-indigo-200 hover:bg-indigo-950/70 hover:text-white transition cursor-pointer select-none"
+            >
+              <GitBranch className="h-4 w-4 text-indigo-400" />
+              Đồng bộ GitHub
+            </button>
+            <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 px-4 py-2 text-xs font-bold text-indigo-200">
+              {workspace.memberIds.length} thành viên
+            </div>
           </div>
         </header>
 
@@ -218,7 +231,7 @@ export default function ProjectWorkspaceView({
               activeSpeakers={{}}
               voiceParticipants={[]}
               onNavigateTab={(tab) => setActiveTab(tab)}
-              onLinkGitHub={() => setActiveTab("github")}
+              onLinkGitHub={() => setIsGitHubModalOpen(true)}
             />
           </div>
         )}
@@ -517,6 +530,15 @@ export default function ProjectWorkspaceView({
           </div>
         )}
       </div>
+
+      {/* GitHub Repository integration and sync modal */}
+      <GitHubRepoSyncModal
+        isOpen={isGitHubModalOpen}
+        onClose={() => setIsGitHubModalOpen(false)}
+        workspace={workspace}
+        onUpdateWorkspace={onUpdateWorkspace}
+        onPostSysMessage={postSystemActivityMessage}
+      />
     </div>
   );
 }
