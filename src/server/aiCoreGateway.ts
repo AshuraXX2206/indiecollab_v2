@@ -1,8 +1,6 @@
-import admin from "firebase-admin";
+import { admin, db } from "./firebaseAdmin";
 import { GoogleGenAI } from "@google/genai";
 import { decryptText } from "./cryptoUtils";
-
-const db = admin.firestore();
 
 /**
  * Lazy initialization/retrieval of a user-specific Gemini API client.

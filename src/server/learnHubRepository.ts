@@ -1,12 +1,10 @@
-import admin from "firebase-admin";
+import { admin, db } from "./firebaseAdmin";
 import type {
   LearnHubOpportunityRecord,
   LearnHubKeywordRecord,
   LearnHubSourceRecord,
   LearnHubScanRunRecord
 } from "./learningPlatformTypes";
-
-const db = admin.firestore();
 
 // -------------------------------------------------------------------------
 // 1. Learning Opportunities

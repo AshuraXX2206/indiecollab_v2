@@ -10,3 +10,6 @@
 - Sau khi hoàn tất thay đổi code hoặc rule, phải commit thay đổi và push lên GitHub.
 - Commit message phải ngắn gọn, mô tả đúng hành vi thay đổi, không gom thêm file ngoài phạm vi công việc.
 - Khi báo cáo kết quả, phải nêu file chính đã sửa, kiểm tra đã chạy, commit hash và trạng thái push.
+
+# Cấu hình Repository
+- **Main Repo (GitHub)**: `https://github.com/AshuraXX2206/indiecollab.git` (Dùng để tham chiếu và merge sau này).

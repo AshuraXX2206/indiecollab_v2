@@ -1,4 +1,4 @@
-import admin from "firebase-admin";
+import { admin, db } from "./firebaseAdmin";
 import {
   getEnabledLearningKeywords,
   getEnabledLearningSources,
@@ -8,8 +8,6 @@ import {
 } from "./learnHubRepository";
 import { getGlobalGeminiClient } from "./aiCoreGateway";
 import type { LearnHubOpportunityRecord, LearnHubCategory } from "./learningPlatformTypes";
-
-const db = admin.firestore();
 
 export interface DiscoveryCandidateUrl {
   url: string;

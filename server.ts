@@ -5,7 +5,7 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import admin from "firebase-admin";
+import { admin, db as firestoreDb } from "./src/server/firebaseAdmin";
 import { createLearnHubRouter } from "./src/server/learnHubRoutes";
 import { createLearnHubAdminRouter } from "./src/server/learnHubAdminRoutes";
 import { createAiCoreRouter } from "./src/server/aiCoreRoutes";
@@ -16,39 +16,8 @@ dotenv.config();
 
 // -------------------------------------------------------------------------
 // 🔐 FIREBASE ADMIN SDK INITIALIZATION
-// Uses Application Default Credentials or service account from env.
-// This enables proper JWT token verification for all API requests.
+// Delegated to "./src/server/firebaseAdmin" for unified database coordinates.
 // -------------------------------------------------------------------------
-const firebaseAppConfig = JSON.parse(
-  fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf-8")
-);
-
-if (!admin.apps.length) {
-  try {
-    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-    if (serviceAccountPath && fs.existsSync(serviceAccountPath)) {
-      const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf-8"));
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        projectId: firebaseAppConfig.projectId,
-      });
-      console.log("✅ Firebase Admin SDK initialized with Service Account Key file.");
-    } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      admin.initializeApp({
-        credential: admin.credential.applicationDefault(),
-        projectId: firebaseAppConfig.projectId,
-      });
-      console.log("✅ Firebase Admin SDK initialized with Google Application Default Credentials.");
-    } else {
-      admin.initializeApp({
-        projectId: firebaseAppConfig.projectId,
-      });
-      console.log("✅ Firebase Admin SDK initialized in default mode (projectId:", firebaseAppConfig.projectId, ")");
-    }
-  } catch (err) {
-    console.warn("⚠️ Firebase Admin SDK init failed. JWT verification will use fallback mode.", err);
-  }
-}
 
 const app = express();
 app.set("trust proxy", true);
@@ -450,7 +419,7 @@ function getGeminiClient(): GoogleGenAI | null {
 
 async function getFirestoreUsersForAi(): Promise<Record<string, any>[]> {
   try {
-    const snapshot = await admin.firestore().collection("users").get();
+    const snapshot = await firestoreDb.collection("users").get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (err) {
     console.warn("⚠️ Failed to fetch users from Firestore (falling back to local DB):", err);
@@ -1247,7 +1216,7 @@ app.delete("/api/admin/clear-firebase", async (req, res) => {
 
   try {
     // Get Firestore instance from Admin SDK
-    const firestore = admin.firestore();
+    const firestore = firestoreDb;
 
     const collections = [
       "users",
@@ -1321,7 +1290,7 @@ app.delete("/api/admin/clean-users", async (req, res) => {
   }
 
   try {
-    const firestore = admin.firestore();
+    const firestore = firestoreDb;
     const auth = admin.auth();
 
     // Get all users collection

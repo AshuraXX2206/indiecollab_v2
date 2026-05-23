@@ -1,10 +1,8 @@
 import express from "express";
 import { GoogleGenAI } from "@google/genai";
-import admin from "firebase-admin";
+import { admin, db } from "./firebaseAdmin";
 import { requireFirebaseUser, AuthenticatedRequest } from "./authGuards";
 import { encryptText } from "./cryptoUtils";
-
-const db = admin.firestore();
 
 export function createAiCoreRouter() {
   const router = express.Router();

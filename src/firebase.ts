@@ -12,13 +12,47 @@ import {
 } from "firebase/auth";
 import { initializeFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import firebaseConfig from "../firebase-applet-config.json";
+import firebaseAppletConfig from "../firebase-applet-config.json";
+
+// Default/Production IndieCollab configurations to use if not overridden or if applet config is missing.
+const defaultProdConfig = {
+  apiKey: "AIzaSyAiBndV-IdUVH-AdiS9UwBZKfTlNtoNHCY",
+  authDomain: "indiecollab-944a1.web.app",
+  projectId: "indiecollab-944a1",
+  storageBucket: "indiecollab-944a1.firebasestorage.app",
+  messagingSenderId: "318090677726",
+  appId: "1:318090677726:web:df8e5058a0380cb6e0214f",
+  measurementId: "G-8RKB8T16MD"
+};
+
+// Read Firebase Config from Vite environment variables (for third-party deployments),
+// and fallback to AI Studio config (firebase-applet-config.json) if not set.
+const metaEnv = (import.meta as any).env || {};
+const appletConfig: any = firebaseAppletConfig || {};
+
+const firebaseConfig = {
+  apiKey: metaEnv.VITE_FIREBASE_API_KEY || appletConfig.apiKey || defaultProdConfig.apiKey,
+  authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || appletConfig.authDomain || defaultProdConfig.authDomain,
+  projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || appletConfig.projectId || defaultProdConfig.projectId,
+  storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || appletConfig.storageBucket || defaultProdConfig.storageBucket,
+  messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || appletConfig.messagingSenderId || defaultProdConfig.messagingSenderId,
+  appId: metaEnv.VITE_FIREBASE_APP_ID || appletConfig.appId || defaultProdConfig.appId,
+  measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID || appletConfig.measurementId || defaultProdConfig.measurementId || ""
+};
 
 const app = initializeApp(firebaseConfig);
-const dbId = (firebaseConfig as any).firestoreDatabaseId;
+
+// Resolve database ID: if explicitly provided via env (even empty), use it;
+// otherwise fall back to AI Studio's sandbox database ID.
+const dbId = (typeof metaEnv.VITE_FIREBASE_DATABASE_ID !== "undefined")
+  ? metaEnv.VITE_FIREBASE_DATABASE_ID
+  : (appletConfig as any).firestoreDatabaseId;
+
+const finalDbId = (dbId === "(default)" || dbId === "default" || !dbId) ? undefined : dbId;
+
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true
-}, dbId || undefined);
+}, finalDbId);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
