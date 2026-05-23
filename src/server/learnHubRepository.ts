@@ -9,13 +9,20 @@ import type {
 // -------------------------------------------------------------------------
 // 1. Learning Opportunities
 // -------------------------------------------------------------------------
-export async function getPublishedLearningOpportunities(limit = 25) {
-  const snapshot = await db
+export async function getPublishedLearningOpportunities(limit = 25, afterId?: string) {
+  let query = db
     .collection("learning_opportunities")
     .where("status", "==", "published")
-    .orderBy("discoveredAt", "desc")
-    .limit(limit)
-    .get();
+    .orderBy("discoveredAt", "desc");
+
+  if (afterId) {
+    const afterDoc = await db.collection("learning_opportunities").doc(afterId).get();
+    if (afterDoc.exists) {
+      query = query.startAfter(afterDoc);
+    }
+  }
+
+  const snapshot = await query.limit(limit).get();
 
   return snapshot.docs.map((doc) => doc.data() as LearnHubOpportunityRecord);
 }

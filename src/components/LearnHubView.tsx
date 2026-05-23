@@ -21,6 +21,9 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { useLanguage } from "../utils/i18n";
+import { getAuth } from "firebase/auth";
+import { useToast } from "../hooks/useToast";
+import { ToastContainer } from "./Toast";
 import type {
   LearningOpportunity,
   LearningKeyword,
@@ -35,6 +38,7 @@ interface LearnHubViewProps {
 
 export default function LearnHubView({ currentUser, onShowAuth }: LearnHubViewProps) {
   const { t } = useLanguage();
+  const { toasts, success, removeToast } = useToast();
 
   // Loading and State
   const [loading, setLoading] = useState(true);
@@ -44,6 +48,11 @@ export default function LearnHubView({ currentUser, onShowAuth }: LearnHubViewPr
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [costFilter, setCostFilter] = useState<string>("all"); // "all" | "free"
+  const [langFilter, setLangFilter] = useState<string>("all"); // "all" | "vi" | "en"
+
+  // Pagination states
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // AI Core BYOK States
   const [byokStatusLoading, setByokStatusLoading] = useState(false);
@@ -80,17 +89,40 @@ export default function LearnHubView({ currentUser, onShowAuth }: LearnHubViewPr
   }, [currentUser]);
 
   // Load public opportunities feed
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
   const loadPublicFeed = async () => {
     try {
       const res = await fetch("/api/learn-hub/opportunities");
       if (res.ok) {
         const data = await res.json();
         setOpportunities(data.items || []);
+        setNextCursor(data.nextCursor || null);
       }
     } catch (err) {
       console.error("Failed to load public feed", err);
     } finally {
+      if (isFirstLoad) {
+        setIsFirstLoad(false);
+      }
       if (!currentUser) setLoading(false);
+    }
+  };
+
+  // Load more public opportunities
+  const loadMoreOpportunities = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(`/api/learn-hub/opportunities?after=${nextCursor}`);
+      if (res.ok) {
+        const data = await res.json();
+        setOpportunities((prev) => [...prev, ...((data.items || []).filter((item: LearningOpportunity) => !prev.some(p => p.id === item.id)))]);
+        setNextCursor(data.nextCursor || null);
+      }
+    } catch (err) {
+      console.error("Failed to load more opportunities", err);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -144,36 +176,15 @@ export default function LearnHubView({ currentUser, onShowAuth }: LearnHubViewPr
     }
   };
 
-  // Fetch Firebase authorization Bearer token (stored directly in client Firebase instance)
   const getFirebaseIdToken = async (): Promise<string | null> => {
-    // We access standard index Window properties initialized by Firebase Auth in modern setups
     try {
-      // Find firebase auth token from local storage or cached session keys
-      // The application provides a global helper, let's mock lookups safely or access local storage keys:
-      // firebase id token is usually stored in indexedDB or available via auth helper
-      // Let's perform standard extraction or look at client index.
-      // In IndieCollab repo, standard firebase is exposed inside the web client.
-      // Let's fetch it from stored firebase keys or sessionStorage:
-      const authKey = Object.keys(localStorage).find(k => k.startsWith("firebase:authUser:"));
-      if (authKey) {
-        const authData = JSON.parse(localStorage.getItem(authKey) || "{}");
-        if (authData && authData.stsTokenManager && authData.stsTokenManager.accessToken) {
-          return authData.stsTokenManager.accessToken;
-        }
-      }
-      
-      // Fallback: check session storage
-      const sessionAuth = Object.keys(sessionStorage).find(k => k.startsWith("firebase:authUser:"));
-      if (sessionAuth) {
-        const sessionData = JSON.parse(sessionStorage.getItem(sessionAuth) || "{}");
-        if (sessionData && sessionData.stsTokenManager && sessionData.stsTokenManager.accessToken) {
-          return sessionData.stsTokenManager.accessToken;
-        }
-      }
+      const auth = getAuth();
+      if (!auth.currentUser) return null;
+      return await auth.currentUser.getIdToken(/* forceRefresh */ true);
     } catch (e) {
-      console.warn("Storage extract of token failed:", e);
+      console.warn("getIdToken failed:", e);
+      return null;
     }
-    return null;
   };
 
   // Load admin dependencies
@@ -409,7 +420,10 @@ export default function LearnHubView({ currentUser, onShowAuth }: LearnHubViewPr
       });
 
       if (res.ok) {
-        alert(t("Bắt đầu tiến trình thu thập nền thành công!", "Background crawl cycle dispatched successfully!"));
+        success(
+          t("Gửi yêu cầu thành công", "Dispatched Successfully"),
+          t("Bắt đầu tiến trình thu thập nền thành công!", "Background crawl cycle dispatched successfully!")
+        );
         // Reload logs after slight delay
         setTimeout(() => loadAdminKeywordsAndSources(idToken), 3000);
       }
@@ -428,12 +442,14 @@ export default function LearnHubView({ currentUser, onShowAuth }: LearnHubViewPr
 
     const matchCategory = selectedCategory === "all" || item.category === selectedCategory;
     const matchCost = costFilter === "all" || (costFilter === "free" && item.isFree);
+    const matchLang = langFilter === "all" || item.language === langFilter;
 
-    return matchSearch && matchCategory && matchCost;
+    return matchSearch && matchCategory && matchCost && matchLang;
   });
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
       {/* HEADER SECTION */}
       <div className="relative mb-10 overflow-hidden rounded-2xl border border-emerald-500/10 bg-gradient-to-r from-emerald-950/20 via-slate-900 to-indigo-950/10 p-8 shadow-2xl">
         <div className="absolute top-1/2 right-10 -translate-y-1/2 opacity-10">
@@ -524,6 +540,45 @@ export default function LearnHubView({ currentUser, onShowAuth }: LearnHubViewPr
                     }`}
                   >
                     🌿 {t("Miễn Phí", "Free Only")}
+                  </button>
+                </div>
+              </div>
+
+              {/* Language selector */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">
+                  {t("Ngôn Ngữ", "Language")}
+                </label>
+                <div className="mt-1.5 grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setLangFilter("all")}
+                    className={`rounded-xl py-2 text-xs font-bold transition cursor-pointer border ${
+                      langFilter === "all"
+                        ? "bg-slate-800 border-slate-700 text-white"
+                        : "bg-slate-950/30 border-slate-900 text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    {t("Tất Cả", "All")}
+                  </button>
+                  <button
+                    onClick={() => setLangFilter("vi")}
+                    className={`rounded-xl py-2 text-xs font-bold transition cursor-pointer border ${
+                      langFilter === "vi"
+                        ? "bg-slate-800 border-emerald-500/30 text-white"
+                        : "bg-slate-950/30 border-slate-900 text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    🇻🇳 {t("Tiếng Việt", "Vietnamese")}
+                  </button>
+                  <button
+                    onClick={() => setLangFilter("en")}
+                    className={`rounded-xl py-2 text-xs font-bold transition cursor-pointer border ${
+                      langFilter === "en"
+                        ? "bg-slate-800 border-blue-500/30 text-white"
+                        : "bg-slate-950/30 border-slate-900 text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    🌐 {t("English", "English")}
                   </button>
                 </div>
               </div>
@@ -939,15 +994,15 @@ export default function LearnHubView({ currentUser, onShowAuth }: LearnHubViewPr
             </div>
 
             {filteredFeed.length === 0 ? (
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/10 py-16 text-center select-none">
-                <AlertTriangle className="mx-auto h-10 w-10 text-slate-600 animate-pulse" />
-                <h3 className="mt-4 text-xs font-bold text-slate-400">{t("Không Tìm Thấy Kết Quả", "No opportunities match your search")}</h3>
-                <p className="mt-1.5 text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
-                  {t(
-                    "Hãy thử đổi từ khóa tìm kiếm khác hoặc chuyển sang chế độ Xem Tất Cả.",
-                    "Verify filters or change search queries to get more results."
-                  )}
-                </p>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/10 py-16 text-center select-none col-span-full flex flex-col items-center justify-center py-20">
+                <BookOpen className="mx-auto h-12 w-12 text-slate-700 mb-4" />
+                <h3 className="text-sm font-bold text-slate-400">{t("Không tìm thấy kết quả phù hợp.", "No results match your filters.")}</h3>
+                <button
+                  onClick={() => { setSearchQuery(""); setSelectedCategory("all"); setCostFilter("all"); setLangFilter("all"); }}
+                  className="mt-4 text-xs text-emerald-400 hover:underline font-mono cursor-pointer"
+                >
+                  {t("Xóa bộ lọc", "Clear filters")}
+                </button>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1014,6 +1069,28 @@ export default function LearnHubView({ currentUser, onShowAuth }: LearnHubViewPr
                     </motion.div>
                   ))}
                 </AnimatePresence>
+              </div>
+            )}
+
+            {/* Load More Pagination Trigger */}
+            {nextCursor && (
+              <div className="mt-8 flex justify-center">
+                <button
+                  onClick={loadMoreOpportunities}
+                  disabled={loadingMore}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 shadow hover:bg-slate-900 hover:border-emerald-500/30 text-slate-300 hover:text-emerald-400 font-bold px-6 py-2.5 text-xs transition duration-300 font-sans cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                      {t("Đang Tải...", "Loading...")}
+                    </>
+                  ) : (
+                    <>
+                      {t("Xem Thêm Cơ Hội", "Load More Opportunities")}
+                    </>
+                  )}
+                </button>
               </div>
             )}
           </div>

@@ -43,10 +43,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Resolve database ID: if explicitly provided via env (even empty), use it;
-// otherwise fall back to AI Studio's sandbox database ID.
+// otherwise fall back to AI Studio's sandbox database ID if not indiecollab-944a1.
 const dbId = (typeof metaEnv.VITE_FIREBASE_DATABASE_ID !== "undefined")
   ? metaEnv.VITE_FIREBASE_DATABASE_ID
-  : (appletConfig as any).firestoreDatabaseId;
+  : (firebaseConfig.projectId === "indiecollab-944a1" ? undefined : (appletConfig as any).firestoreDatabaseId);
 
 const finalDbId = (dbId === "(default)" || dbId === "default" || !dbId) ? undefined : dbId;
 

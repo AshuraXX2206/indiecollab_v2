@@ -9,9 +9,11 @@ export function createLearnHubRouter() {
 
   router.get("/opportunities", async (req, res) => {
     try {
-      const limit = Math.min(Number(req.query.limit || 25), 100);
-      const items = await getPublishedLearningOpportunities(limit);
-      return res.json({ items });
+      const limit = Math.min(Number(req.query.limit || 25), 50);
+      const afterId = req.query.after as string | undefined; // last doc ID from previous page
+      const items = await getPublishedLearningOpportunities(limit, afterId);
+      const nextCursor = items.length === limit ? items[items.length - 1].id : null;
+      return res.json({ items, nextCursor });
     } catch (error) {
       console.error("[LearnHub] Failed to load opportunities", error);
       return res.status(500).json({ error: "Không thể tải Learn Hub. Vui lòng thử lại sau." });

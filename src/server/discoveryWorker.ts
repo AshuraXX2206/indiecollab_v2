@@ -8,6 +8,7 @@ import {
 } from "./learnHubRepository";
 import { getGlobalGeminiClient } from "./aiCoreGateway";
 import type { LearnHubOpportunityRecord, LearnHubCategory } from "./learningPlatformTypes";
+import { Type } from "@google/genai";
 
 export interface DiscoveryCandidateUrl {
   url: string;
@@ -184,7 +185,110 @@ async function fetchGoogleCustomSearch(query: string): Promise<Array<{ title: st
 }
 
 /**
- * AI Classifier using Gemini 2.5 Flash
+ * Local fallback heuristics for classification
+ */
+function fallbackHeuristics(title: string, url: string): {
+  category: LearnHubCategory;
+  isFree: boolean;
+  freeCondition: string;
+  tags: string[];
+  language: string;
+} {
+  const lTitle = title.toLowerCase();
+  let category: LearnHubCategory = "course";
+  if (lTitle.includes("hội thảo") || lTitle.includes("workshop") || lTitle.includes("event") || lTitle.includes("sự kiện")) {
+    category = "event";
+  } else if (lTitle.includes("học bổng") || lTitle.includes("scholarship")) {
+    category = "scholarship";
+  } else if (lTitle.includes("chứng chỉ") || lTitle.includes("certificate")) {
+    category = "certificate";
+  }
+  return {
+    category,
+    isFree: !lTitle.includes("buy") && !lTitle.includes("mất phí") && !lTitle.includes("đọc thử"),
+    freeCondition: "Miễn phí",
+    tags: lTitle.includes("unity") ? ["Unity", "C#"] : lTitle.includes("unreal") ? ["Unreal", "C++"] : ["Game Dev"],
+    language: /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệđìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]/i.test(title) ? "vi" : "en"
+  };
+}
+
+/**
+ * Batch AI Classifier using Gemini 3.5 Flash (free tier compliant and optimized)
+ */
+async function classifyBatchWithGemini(
+  items: Array<{ title: string; url: string }>
+): Promise<Array<{
+  category: LearnHubCategory;
+  isFree: boolean;
+  freeCondition: string;
+  tags: string[];
+  language: string;
+}>> {
+  const ai = getGlobalGeminiClient();
+  if (!ai || items.length === 0) {
+    return items.map(it => fallbackHeuristics(it.title, it.url));
+  }
+
+  try {
+    const prompt = `You are an expert AI Classifier for a game development network called Learn Hub.
+Classify each learning resource list below on its metadata and provide categorization, commercial pricing, technical tags, and language indicator.
+
+Return ONLY a JSON array, one object per item, in the exact same order as the input list.
+
+Items:
+${items.map((it, i) => `${i + 1}. Title: "${it.title}" URL: "${it.url}"`).join("\n")}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              category: { type: Type.STRING, description: "Category: 'course' | 'certificate' | 'scholarship' | 'event' | 'other'" },
+              isFree: { type: Type.BOOLEAN, description: "Whether this resource is free" },
+              freeCondition: { type: Type.STRING, description: "Brief free condition status string in Vietnamese, e.g. 'Học miễn phí', 'Học thử/Trả phí', 'Bản dùng thử', 'Yêu cầu đăng ký'" },
+              tags: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "List of max 3 technical tags related to game development (e.g., Unity, C#, Unreal Engine, Blender)"
+              },
+              language: { type: Type.STRING, description: "Language used in the course: 'vi' | 'en' | 'other'" }
+            },
+            required: ["category", "isFree", "freeCondition", "tags", "language"]
+          }
+        }
+      }
+    });
+
+    const cleanText = response.text?.trim() || "[]";
+    const parsed = JSON.parse(cleanText);
+
+    if (Array.isArray(parsed)) {
+      return items.map((it, idx) => {
+        const itemResult = parsed[idx] || {};
+        return {
+          category: (itemResult.category || "course") as LearnHubCategory,
+          isFree: typeof itemResult.isFree === "boolean" ? itemResult.isFree : true,
+          freeCondition: itemResult.freeCondition || "Học miễn phí",
+          tags: Array.isArray(itemResult.tags) ? itemResult.tags.slice(0, 3) : ["Game Dev"],
+          language: itemResult.language || "en"
+        };
+      });
+    }
+  } catch (err) {
+    console.warn(`[Discovery/Gemini] Batch classification failed for ${items.length} items. Falling back to local heuristics:`, err);
+  }
+
+  // Fallback for all items in case of failure
+  return items.map(it => fallbackHeuristics(it.title, it.url));
+}
+
+/**
+ * AI Classifier using Gemini 3.5 Flash
  */
 async function classifyOpportunityWithGemini(title: string, url: string): Promise<{
   category: LearnHubCategory;
@@ -193,72 +297,8 @@ async function classifyOpportunityWithGemini(title: string, url: string): Promis
   tags: string[];
   language: string;
 }> {
-  const ai = getGlobalGeminiClient();
-  const fallback = {
-    category: "course" as LearnHubCategory,
-    isFree: true,
-    freeCondition: "Miễn phí công bố",
-    tags: ["Game Dev"],
-    language: "vi"
-  };
-
-  if (!ai) {
-    // Basic heuristic classifier
-    const lTitle = title.toLowerCase();
-    let category: LearnHubCategory = "course";
-    if (lTitle.includes("hội thảo") || lTitle.includes("workshop") || lTitle.includes("event") || lTitle.includes("sự kiện")) {
-      category = "event";
-    } else if (lTitle.includes("học bổng") || lTitle.includes("scholarship")) {
-      category = "scholarship";
-    } else if (lTitle.includes("chứng chỉ") || lTitle.includes("certificate")) {
-      category = "certificate";
-    }
-    return {
-      category,
-      isFree: !lTitle.includes("buy") && !lTitle.includes("mất phí") && !lTitle.includes("đọc thử"),
-      freeCondition: "Miễn phí",
-      tags: lTitle.includes("unity") ? ["Unity", "C#"] : lTitle.includes("unreal") ? ["Unreal", "C++"] : ["Game Dev"],
-      language: /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệđìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]/i.test(title) ? "vi" : "en"
-    };
-  }
-
-  try {
-    const prompt = `You are an expert AI Classifier for a game development network called Learn Hub.
-Classify the learning resource based on its metadata and provide categorization, commercial pricing, technical tags, and language indicator.
-
-Resource details:
-- Title: "${title}"
-- URL: "${url}"
-
-Return ONLY a standard, valid JSON output strictly matching this schema (no backticks, no markdown):
-{
-  "category": "course" | "certificate" | "scholarship" | "event" | "other",
-  "isFree": boolean,
-  "freeCondition": string,
-  "tags": string[],
-  "language": "vi" | "en" | "other"
-}`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-    });
-
-    const cleanText = response.text?.trim() || "{}";
-    const cleanJson = cleanText.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleanJson);
-
-    return {
-      category: parsed.category || "course",
-      isFree: typeof parsed.isFree === "boolean" ? parsed.isFree : true,
-      freeCondition: parsed.freeCondition || "Học miễn phí",
-      tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 3) : ["Game Dev"],
-      language: parsed.language || "en"
-    };
-  } catch (err) {
-    console.warn(`[Discovery/Gemini] Classification failed for "${title}". Using local heuristics:`, err);
-    return fallback;
-  }
+  const [result] = await classifyBatchWithGemini([{ title, url }]);
+  return result;
 }
 
 /**
@@ -332,55 +372,83 @@ export async function runLearningDiscoveryCycle() {
     urlsFoundCount = candidates.length;
     console.log(`[Discovery] Scanned and found ${urlsFoundCount} candidates. Deduplicating & analyzing...`);
 
-    // Part C: Deduplication & AI Categorization
+    // Part C: Deduplication & Compliance Filters
     const processedUrls = new Set<string>();
-    
+    const eligibleCandidates: typeof candidates = [];
+
     for (const cand of candidates) {
-      // Avoid scanning same URL twice in this run
       if (processedUrls.has(cand.url)) continue;
       processedUrls.add(cand.url);
 
       try {
-        // Deduplicate against existing opportunities database
         const existingOpportunityQuery = await db
           .collection("learning_opportunities")
           .where("canonicalUrl", "==", cand.url)
           .get();
 
         if (!existingOpportunityQuery.empty) {
-          continue; // URL already exists, bypass
+          continue;
         }
 
-        // Compliance check (robots.txt)
         const isCompliant = await checkRobotsCompliance(cand.url);
         if (!isCompliant) continue;
 
-        // Perform AI analysis and tagging
-        console.log(`[Discovery/AI] Analyzing new target: "${cand.title}" -> ${cand.url}`);
-        const aiInfo = await classifyOpportunityWithGemini(cand.title, cand.url);
-
-        const opId = db.collection("learning_opportunities").doc().id;
-        const record: LearnHubOpportunityRecord = {
-          id: opId,
-          title: cand.title,
-          canonicalUrl: cand.url,
-          sourceDomain: new URL(cand.url).hostname,
-          sourceType: cand.sourceType,
-          category: aiInfo.category,
-          isFree: aiInfo.isFree,
-          freeCondition: aiInfo.freeCondition,
-          tags: aiInfo.tags,
-          language: aiInfo.language,
-          status: "pending_review",
-          discoveredAt: new Date().toISOString(),
-          lastVerifiedAt: new Date().toISOString()
-        };
-
-        await upsertOpportunity(record);
-        itemsCreatedCount++;
+        eligibleCandidates.push(cand);
       } catch (err: any) {
-        console.error(`[Discovery] Failed to ingest candidate ${cand.url}:`, err);
-        errors.push({ source: cand.url, message: err.message || "Ingestion analysis failure" });
+        console.error(`[Discovery] Failed to validate compliance for candidate ${cand.url}:`, err);
+        errors.push({ source: cand.url, message: err.message || "Compliance/duplication pre-check failed" });
+      }
+    }
+
+    console.log(`[Discovery] Deduplication & compliance complete. ${eligibleCandidates.length} eligible candidates left for AI classification.`);
+
+    const BATCH_SIZE = 5;
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    const GEMINI_RATE_DELAY_MS = 4500; // safe for 15 RPM
+
+    for (let i = 0; i < eligibleCandidates.length; i += BATCH_SIZE) {
+      const chunk = eligibleCandidates.slice(i, i + BATCH_SIZE);
+      console.log(`[Discovery] Classification batch processing ${i / BATCH_SIZE + 1} with ${chunk.length} items...`);
+
+      if (i > 0) {
+        await sleep(GEMINI_RATE_DELAY_MS);
+      }
+
+      try {
+        const aiInfos = await classifyBatchWithGemini(chunk);
+
+        for (let j = 0; j < chunk.length; j++) {
+          const cand = chunk[j];
+          const aiInfo = aiInfos[j] || fallbackHeuristics(cand.title, cand.url);
+
+          try {
+            const opId = db.collection("learning_opportunities").doc().id;
+            const record: LearnHubOpportunityRecord = {
+              id: opId,
+              title: cand.title,
+              canonicalUrl: cand.url,
+              sourceDomain: new URL(cand.url).hostname,
+              sourceType: cand.sourceType,
+              category: aiInfo.category,
+              isFree: aiInfo.isFree,
+              freeCondition: aiInfo.freeCondition,
+              tags: aiInfo.tags,
+              language: aiInfo.language,
+              status: "pending_review",
+              discoveredAt: new Date().toISOString(),
+              lastVerifiedAt: new Date().toISOString()
+            };
+
+            await upsertOpportunity(record);
+            itemsCreatedCount++;
+          } catch (err: any) {
+            console.error(`[Discovery] Failed to ingest candidate ${cand.url}:`, err);
+            errors.push({ source: cand.url, message: err.message || "Ingestion record creation failure" });
+          }
+        }
+      } catch (err: any) {
+        console.error(`[Discovery] Failed to classify and process batch starting at ${i}:`, err);
+        errors.push({ source: `Batch ${i}`, message: err.message || "Batch classification failure" });
       }
     }
 
