@@ -101,6 +101,7 @@ export default function CoopMarket({
   pendingConnectionCount
 }: CoopMarketProps) {
   const [subTab, setSubTab] = useState<"bounty" | "market" | "verify">("bounty");
+  const [showMarketTutorial, setShowMarketTutorial] = useState(true);
 
   // Bounty state managers
   const [showBountyForm, setShowBountyForm] = useState(false);
@@ -479,6 +480,88 @@ export default function CoopMarket({
           </button>
         </div>
       </div>
+
+      {/* Monetization & Hunting Interactive Guidebook Banner */}
+      {showMarketTutorial && (
+        <div className="mt-6 bg-indigo-950/20 border border-indigo-500/20 rounded-2xl p-5 relative overflow-hidden backdrop-blur-sm text-left">
+          {/* Subtle decoration */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-pink-500/5 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex items-start justify-between gap-4 relative z-10">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/15">
+                <HelpCircle className="h-4 w-4 animate-pulse" />
+              </span>
+              <div>
+                <h2 className="text-sm font-extrabold text-white font-mono tracking-tight flex items-center gap-1.5 uppercase">
+                  Sổ Tay Săn Lỗi & Khởi Nghiệp Game Độc Bản (Tutorial)
+                </h2>
+                <p className="text-[11px] text-slate-450 mt-0.5 font-mono">Bảo đảm tính minh bạch, hỗ trợ tối đa doanh thu và kiểm soát chất lượng từ IndieCollab Vault</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setShowMarketTutorial(false)}
+              className="text-slate-400 hover:text-white text-xs font-mono border border-slate-800 bg-slate-900/60 hover:bg-slate-900 px-3 py-1 rounded-xl cursor-pointer select-none"
+            >
+              Ẩn hướng dẫn ×
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-5 pt-4 border-t border-slate-850 relative z-10">
+            {/* Step 1: For Hunters */}
+            <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-xl space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-indigo-600 text-[10px] font-bold text-white font-mono">01</span>
+                <span className="text-xs font-bold text-slate-200">Săn Bug & Kiếm Tiền (Bug Hunter)</span>
+              </div>
+              <ul className="text-[11px] text-slate-450 space-y-1.5 list-disc list-inside">
+                <li><strong className="text-slate-300">Nhận nhiệm vụ:</strong> Xem danh sách các lỗi trong tab <span className="text-indigo-400 font-mono">Săn Bug</span>, nhấn <span className="text-indigo-400 font-mono">"Nhận Sửa Lỗi"</span> để đăng ký xử lý.</li>
+                <li><strong className="text-slate-300">Clone & Code:</strong> Lập trình viên tải mã nguồn hoặc clone, viết mã sửa lỗi và mở Pull Request (PR) minh chứng sạch sẽ trên repo.</li>
+                <li><strong className="text-slate-300">Nhận Thưởng:</strong> Nhập URL Pull Request và ghi chú giải thuật để chủ dự án nghiệm thu chuyển nợ an toàn qua Escrow Vault.</li>
+              </ul>
+            </div>
+
+            {/* Step 2: For Owners and AI Warden */}
+            <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-xl space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-indigo-600 text-[10px] font-bold text-white font-mono">02</span>
+                <span className="text-xs font-bold text-slate-200">Dành Cho Chủ Dự Án (Game Dev Only)</span>
+              </div>
+              <ul className="text-[11px] text-slate-450 space-y-1.5 list-disc list-inside">
+                <li><strong className="text-slate-300">Ký quỹ Vault:</strong> Khi tạo Bug Bounty, tiền thưởng của bạn được chuyển vào quỹ ký quỹ <span className="text-indigo-400">Escrow Locked</span> bảo đảm lòng tin.</li>
+                <li><strong className="text-slate-300">Bảo mật Repo:</strong> Tuỳ chỉnh loại hiển thị repo (Public hoặc Private với thư mời/Snippet) cho tài nguyên bảo mật cao.</li>
+                <li><strong className="text-slate-300">Trọng Tài Warden AI:</strong> Nếu thợ săn làm đúng nhưng bạn không nhận, thợ săn có thể gọi <span className="text-indigo-455">Trọng tài AI</span> kiểm tra mã sửa và tuyên án trích tiền tự động.</li>
+              </ul>
+            </div>
+
+            {/* Step 3: For Artists */}
+            <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-xl space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-pink-600 text-[10px] font-bold text-white font-mono">03</span>
+                <span className="text-xs font-bold text-slate-200">Bán Asset Game Độc Bản</span>
+              </div>
+              <ul className="text-[11px] text-slate-450 space-y-1.5 list-disc list-inside">
+                <li><strong className="text-pink-400">Đăng bán tác phẩm:</strong> Tải lên tệp zip nén Sprite sheets, tệp 3D (.fbx, .obj) hoặc âm thanh, định giá coin tùy ý.</li>
+                <li><strong className="text-slate-300">Xem thử Tương tác:</strong> Mọi lập trình viên đều có thể xoay zoom đồ họa 3D, chạy thử hoạt ảnh trực quan trong sảnh trước khi chi tiền.</li>
+                <li><strong className="text-slate-300">Giấy Chứng Nhận:</strong> Sau khi mua, tác phẩm khóa bán toàn cầu, tự động sinh mã xác thực giao dịch để chủ mới tải tệp an toàn.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Button to show tutorial if closed */}
+      {!showMarketTutorial && (
+        <div className="mt-4 flex justify-end">
+          <button 
+            onClick={() => setShowMarketTutorial(true)}
+            className="inline-flex items-center gap-1.5 text-[10px] font-mono text-indigo-400 bg-indigo-950/20 border border-slate-900 px-3 py-1.5 rounded-xl hover:bg-indigo-950/40 cursor-pointer select-none"
+          >
+            <HelpCircle className="h-3 w-3" /> Hiện sổ tay hướng dẫn kiếm tiền & săn bug
+          </button>
+        </div>
+      )}
 
       {/* SEARCH AND CONTROL LINE */}
       {subTab !== "verify" && (

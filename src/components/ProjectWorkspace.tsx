@@ -20,7 +20,10 @@ import {
   HelpCircle,
   LayoutGrid,
   GitBranch,
-  Award
+  Award,
+  Binary,
+  Compass,
+  BookOpen
 } from "lucide-react";
 import { db } from "../firebase";
 import { Project, ProjectGoal, ProjectTask, ProjectWorkspace, ProjectWorkspaceFile, User, WorkspaceMessage } from "../types";
@@ -29,8 +32,10 @@ import ProjectKanbanBoard from "./ProjectKanbanBoard";
 // Sub-modules
 import WorkspaceDashboard from "./workspace/WorkspaceDashboard";
 import ChannelSystem from "./workspace/ChannelSystem";
-import GitHubIntegration from "./workspace/GitHubIntegration";
+import GitHubAdvancedPipeline from "./workspace/GitHubAdvancedPipeline";
 import MilestoneTracker from "./workspace/MilestoneTracker";
+import AssetInteractiveHub from "./workspace/AssetInteractiveHub";
+import GuideHandbook from "./workspace/GuideHandbook";
 
 // Presence Hooks
 import { usePresence } from "../hooks/usePresence";
@@ -52,7 +57,7 @@ export default function ProjectWorkspaceView({
 }: ProjectWorkspaceProps) {
   // Navigation tabs state
   const [activeTab, setActiveTab] = useState<
-    "overview" | "kanban" | "goals" | "chat" | "github" | "milestones" | "files" | "members"
+    "overview" | "kanban" | "goals" | "chat" | "github" | "milestones" | "files" | "members" | "assets_hub" | "tutorial"
   >("overview");
 
   const [fileName, setFileName] = useState("");
@@ -68,12 +73,14 @@ export default function ProjectWorkspaceView({
     switch (tabId) {
       case "overview": return "Xem Tổng quan";
       case "kanban": return "Bảng tiến độ";
-      case "goals": return "Cột mốc thiếp lập";
+      case "goals": return "Cột mốc thiết lập";
       case "chat": return "Kênh Thảo luận Chat/Voice";
-      case "github": return "Mã nguồn GitHub";
+      case "github": return "Pipeline & GitHub";
       case "milestones": return "Lộ trình Sprints";
       case "files": return "Tệp của Workspace";
       case "members": return "Xem Đội ngũ";
+      case "assets_hub": return "Duyệt Assets Họa Sĩ";
+      case "tutorial": return "Sổ tay Hướng dẫn";
       default: return "Hợp tác sảnh";
     }
   };
@@ -181,10 +188,12 @@ export default function ProjectWorkspaceView({
             { id: "kanban", label: "Bảng tiến độ", Icon: Check },
             { id: "goals", label: "Mục tiêu", Icon: Goal },
             { id: "chat", label: "Kênh Chat/Voice", Icon: MessageSquare },
-            { id: "github", label: "Mã nguồn GitHub", Icon: GitBranch },
+            { id: "github", label: "Live Pipeline & GitHub", Icon: GitBranch },
             { id: "milestones", label: "Mốc RoadMap", Icon: Award },
+            { id: "assets_hub", label: "Thư viện Assets", Icon: Compass },
             { id: "files", label: "Tài nguyên", Icon: FileText },
             { id: "members", label: "Hội viên", Icon: Users },
+            { id: "tutorial", label: "Sổ tay HD", Icon: BookOpen },
           ].map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -358,7 +367,7 @@ export default function ProjectWorkspaceView({
         {/* GitHub integration integration */}
         {activeTab === "github" && (
           <div className="mt-6 animation-fade-in">
-            <GitHubIntegration 
+            <GitHubAdvancedPipeline 
               workspace={workspace}
               onUpdateWorkspace={onUpdateWorkspace}
               onPostSysMessage={postSystemActivityMessage}
@@ -485,6 +494,27 @@ export default function ProjectWorkspaceView({
               </div>
             ))}
           </section>
+        )}
+
+        {/* Asset Interactive Hub tab */}
+        {activeTab === "assets_hub" && (
+          <div className="mt-6 animation-fade-in">
+            <AssetInteractiveHub 
+              workspace={workspace}
+              currentUser={currentUser}
+              onPostSysMessage={postSystemActivityMessage}
+              onAddWorkspaceFile={async (file) => {
+                await onUpdateWorkspace(workspace.id, { files: [...(workspace.files || []), file] });
+              }}
+            />
+          </div>
+        )}
+
+        {/* Tutorial and Help guide book tab */}
+        {activeTab === "tutorial" && (
+          <div className="mt-6 animation-fade-in">
+            <GuideHandbook />
+          </div>
         )}
       </div>
     </div>
