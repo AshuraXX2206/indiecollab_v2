@@ -313,15 +313,31 @@ export default function HowItWorksSection() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-stretch">
               
               {/* LEFT COLUMN: INTERACTIVE TICKETS (5 Cols) */}
-              <div className="lg:col-span-5 flex flex-col justify-between space-y-5 text-left">
+              <motion.div 
+                className="lg:col-span-5 flex flex-col justify-between space-y-5 text-left"
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, margin: "-80px" }}
+                variants={{
+                  hidden: { opacity: 0 },
+                  visible: {
+                    opacity: 1,
+                    transition: { staggerChildren: 0.12 }
+                  }
+                }}
+              >
                 <div className="space-y-4">
                   {steps.map((item, idx) => {
                     const isActive = activeStep === idx;
                     return (
-                      <div 
+                      <motion.div 
                         key={item.id}
                         onClick={() => handleStepSelect(idx)}
                         onMouseEnter={() => playHoverSound()}
+                        variants={{
+                          hidden: { opacity: 0, y: 20 },
+                          visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 100, damping: 15 } }
+                        }}
                         className={`group relative p-5 rounded-2xl border transition-all duration-300 cursor-pointer text-left overflow-hidden ${
                           isActive 
                             ? "bg-white/[0.04] border-white/[0.15] shadow-xl" 
@@ -373,7 +389,7 @@ export default function HowItWorksSection() {
                             </p>
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
                     );
                   })}
                 </div>
@@ -384,10 +400,16 @@ export default function HowItWorksSection() {
                     Hơn <strong className="text-slate-300">1,400+ nhà phát triển game</strong> đã thành công kết nối và phát hành sảnh chơi.
                   </span>
                 </div>
-              </div>
+              </motion.div>
 
               {/* RIGHT COLUMN: INTERACTIVE SCREEN SIMULATOR (7 Cols) */}
-              <div className="lg:col-span-7 flex flex-col justify-center">
+              <motion.div 
+                className="lg:col-span-7 flex flex-col justify-center"
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-40px" }}
+                transition={{ duration: 0.55, delay: 0.1 }}
+              >
                 <div className="relative rounded-2xl border border-white/[0.06] bg-[#09090b]/80 shadow-2xl overflow-hidden" 
                      style={{ minHeight: "380px" }}>
                   
@@ -683,7 +705,7 @@ export default function HowItWorksSection() {
                     </AnimatePresence>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
             </div>
 
@@ -711,7 +733,13 @@ export default function HowItWorksSection() {
       </AnimatePresence>
 
       {/* ── FOOTER COLLABORATION HIGHLIGHT SCENE ── */}
-      <div className="pt-10 border-t border-white/[0.04] grid grid-cols-1 md:grid-cols-2 gap-8 text-left items-center bg-[#09090b]/20 p-6 md:p-8 rounded-2xl relative overflow-hidden">
+      <motion.div 
+        initial={{ opacity: 0, y: 35 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-40px" }}
+        transition={{ duration: 0.6, type: "spring", stiffness: 80, damping: 15 }}
+        className="pt-10 border-t border-white/[0.04] grid grid-cols-1 md:grid-cols-2 gap-8 text-left items-center bg-[#09090b]/20 p-6 md:p-8 rounded-2xl relative overflow-hidden"
+      >
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-mono font-bold text-emerald-400">
             <ShieldCheck className="h-3 w-3" /> ĐỘ SẮC NÉT TUYỆT ĐỐI
@@ -753,7 +781,7 @@ export default function HowItWorksSection() {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
     </div>
   );
