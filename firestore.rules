@@ -17,7 +17,7 @@ service cloud.firestore {
       return data.keys().hasAll(['id', 'displayName', 'avatarUrl', 'jobTitle', 'skills', 'tools', 'bio', 'howToReachMe', 'openToWork', 'createdAt'])
         && data.id is string
         && data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100
-        && data.avatarUrl is string && data.avatarUrl.size() <= 20000000
+        && data.avatarUrl is string && data.avatarUrl.size() <= 256000
         && data.jobTitle is string
         && data.skills is list
         && data.tools is list
@@ -47,12 +47,18 @@ service cloud.firestore {
         && (!data.keys().hasAny(['meetLink']) || data.meetLink is string);
     }
 
+    function isValidTaskArray(tasks) {
+      return tasks is list 
+        && tasks.size() <= 100
+        && (tasks.size() == 0 || (tasks[0] is map && tasks[0].keys().hasAll(['id', 'title', 'status'])));
+    }
+
     function isValidPortfolio(data) {
       return data.keys().hasAll(['id', 'userId', 'title', 'mediaUrl', 'mediaType', 'description'])
         && data.id is string
         && data.userId is string
         && data.title is string && data.title.size() >= 2 && data.title.size() <= 200
-        && data.mediaUrl is string && data.mediaUrl.size() <= 20000000
+        && data.mediaUrl is string && (data.mediaUrl.size() <= 524288 || data.mediaUrl.matches('^https?://.+'))
         && data.mediaType is string
         && data.description is string;
     }
@@ -229,6 +235,7 @@ service cloud.firestore {
             && request.resource.data.memberIds == resource.data.memberIds
             && request.resource.data.memberProfiles == resource.data.memberProfiles
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['goals', 'tasks', 'files', 'milestones', 'pinnedMessageIds', 'githubRepoUrl', 'githubLinkedAt', 'githubLinkedBy'])
+            && (!request.resource.data.keys().hasAny(['tasks']) || isValidTaskArray(request.resource.data.tasks))
           )
           ||
           (
@@ -267,11 +274,17 @@ service cloud.firestore {
           allow read: if isWorkspaceMember(projectId);
           allow create: if isWorkspaceMember(projectId)
             && request.resource.data.id == msgId
-            && request.resource.data.senderId == uid();
+            && request.resource.data.senderId == uid()
+            && (!exists(/databases/$(database)/documents/project_workspaces/$(projectId)/channels/$(channelId)/rate_limit/$(uid())) || request.time > get(/databases/$(database)/documents/project_workspaces/$(projectId)/channels/$(channelId)/rate_limit/$(uid())).data.lastSent + duration.value(2, 's'));
           allow update: if isWorkspaceMember(projectId)
             && resource.data.senderId == uid();
           allow delete: if isWorkspaceMember(projectId)
             && resource.data.senderId == uid();
+        }
+
+        match /rate_limit/{memberId} {
+          allow read: if isWorkspaceMember(projectId);
+          allow write: if signedIn() && isWorkspaceMember(projectId) && uid() == memberId && request.resource.data.lastSent == request.time;
         }
       }
 
@@ -286,7 +299,7 @@ service cloud.firestore {
 
         match /participants/{participantId} {
           allow read: if isWorkspaceMember(projectId);
-          allow write: if signedIn() && isWorkspaceMember(projectId);
+          allow write: if signedIn() && isWorkspaceMember(projectId) && uid() == participantId;
         }
       }
     }
@@ -312,6 +325,7 @@ service cloud.firestore {
             && request.resource.data.status == 'Claimed'
             && resource.data.reportedById != uid()
             && request.resource.data.assignedTo == uid()
+            && request.time > resource.data.createdAt.toTime() + duration.value(10, 'm')
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'assignedTo', 'assignedToName', 'claimedAt'])
           )
           ||
@@ -365,6 +379,20 @@ service cloud.firestore {
           )
         );
       allow delete: if signedIn() && resource.data.reportedById == uid();
+
+      match /claim_lock/{claimerId} {
+        allow create: if signedIn()
+          && claimerId == uid()
+          && get(/databases/$(database)/documents/bounties/$(bountyId)).data.status == 'Open'
+          && get(/databases/$(database)/documents/bounties/$(bountyId)).data.reportedById != uid();
+        allow read: if signedIn();
+        allow update, delete: if false;
+      }
+
+      match /audit/{logId} {
+        allow read: if true;
+        allow write: if false;
+      }
     }
 
     match /exclusive_assets/{assetId} {
@@ -443,9 +471,13 @@ service cloud.firestore {
         && request.resource.data.userId == uid()
         && request.resource.data.status == 'pending';
       allow update: if signedIn()
+        && resource.data.ownerId == uid()
+        && request.resource.data.id == resource.data.id
         && request.resource.data.userId == resource.data.userId
         && request.resource.data.studioId == resource.data.studioId
-        && resource.data.ownerId == uid();
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.status in ['approved', 'rejected']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt']);
       allow delete: if signedIn() && (resource.data.userId == uid() || resource.data.ownerId == uid());
     }
 
@@ -464,7 +496,9 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.userId is string
         && request.resource.data.title is string
-        && request.resource.data.message is string;
+        && request.resource.data.message is string
+        && request.resource.data.actorId == uid()
+        && request.resource.data.userId != uid();
       allow update: if signedIn()
         && resource.data.userId == uid()
         && request.resource.data.userId == resource.data.userId
@@ -492,10 +526,11 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.organizerId == uid();
     }
 
-    // Jam Registrations — participants register for jams
+    // Jam Registrations — participants register for jams (id is userId_jamId to enforce uniqueness)
     match /jam_registrations/{regId} {
       allow read: if true;
       allow create: if signedIn()
+                    && regId == request.resource.data.userId + '_' + request.resource.data.jamId
                     && request.resource.data.keys().hasAll(['jamId', 'userId', 'type', 'registeredAt'])
                     && request.resource.data.userId == uid();
       allow update: if signedIn()
@@ -518,25 +553,22 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.leaderId == uid();
     }
 
-    // Jam Votes — community voting (immutable once cast, one per voter per jam)
+    // Jam Votes — community voting (immutable once cast, one per voter per jam, id is jamId_voterId with self-vote blocks)
     match /jam_votes/{voteId} {
       allow read: if true;
       allow create: if signedIn()
+                    && voteId == request.resource.data.jamId + '_' + request.resource.data.voterId
                     && request.resource.data.keys().hasAll(['jamId', 'voterId', 'targetId', 'targetType', 'createdAt'])
-                    && request.resource.data.voterId == uid();
+                    && request.resource.data.voterId == uid()
+                    && request.resource.data.voterId != request.resource.data.targetId;
       allow update: if false;
       allow delete: if false;
     }
 
-    // User Points — global point ledger (append-only, self-only)
+    // User Points — global point ledger (read-only for clients, written purely by Server REST Admin SDK)
     match /user_points/{pointId} {
       allow read: if true;
-      allow create: if signedIn()
-                    && request.resource.data.keys().hasAll(['userId', 'amount', 'source', 'description', 'createdAt'])
-                    && request.resource.data.userId == uid()
-                    && request.resource.data.amount is number
-                    && request.resource.data.amount > 0
-                    && request.resource.data.amount <= 1000;
+      allow create: if false;
       allow update: if false;
       allow delete: if false;
     }

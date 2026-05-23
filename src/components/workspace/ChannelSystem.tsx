@@ -7,7 +7,8 @@ import {
   deleteDoc, 
   query, 
   getDocs, 
-  updateDoc 
+  updateDoc,
+  serverTimestamp
 } from "firebase/firestore";
 import { 
   Hash, 
@@ -59,6 +60,7 @@ export default function ChannelSystem({
   const [chanTopic, setChanTopic] = useState("");
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const lastSendRef = useRef<number>(0);
 
   // Default channels initialization helper
   useEffect(() => {
@@ -191,7 +193,33 @@ export default function ChannelSystem({
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim()) return;
+
+    const now = Date.now();
+    if (now - lastSendRef.current < 2000) {
+      alert("Bạn đang gửi tin nhắn quá nhanh. Vui lòng dừng 2 giây giữa các lần gửi.");
+      return;
+    }
+    lastSendRef.current = now;
+
     const msgId = "chnmsg-" + Date.now();
+
+    // Settle rate limit on Firestore first
+    try {
+      const lockThrottleRef = doc(
+        db,
+        "project_workspaces",
+        workspace.id,
+        "channels",
+        activeChannelId,
+        "rate_limit",
+        currentUser.id
+      );
+      await setDoc(lockThrottleRef, { lastSent: serverTimestamp() });
+    } catch (throttleErr) {
+      console.error("[Rate Limit] Cooldown checkpoint failed:", throttleErr);
+      alert("Không thể gửi tin nhắn do giới hạn tần suất gửi tin.");
+      return;
+    }
     
     const payload: ChannelMessage = {
       id: msgId,

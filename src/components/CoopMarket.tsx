@@ -1,4 +1,4 @@
-import React, { useState, lazy } from "react";
+import React, { useState, useEffect, lazy } from "react";
 import { User, BountyTask, ExclusiveAsset } from "../types";
 import { 
   Plus, 
@@ -66,6 +66,105 @@ const sanitizeStorageFileName = (name: string) => {
 const isGithubPullRequestUrl = (url: string) => {
   return /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+(?:[/?#].*)?$/i.test(url.trim());
 };
+
+function HunterReputation({ userId }: { userId: string }) {
+  const [reputation, setReputation] = useState<{ score: number; label: string } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/users/${userId}/reputation`)
+      .then(res => res.json())
+      .then(data => {
+        if (active) {
+          setReputation({ score: data.score, label: data.label });
+        }
+      })
+      .catch(err => console.error("Reputation fetch failed:", err));
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
+  if (!reputation) return null;
+
+  return (
+    <span className={`inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[9px] font-bold font-mono border ml-1.5 ${
+      reputation.score >= 80 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+      reputation.score >= 50 ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
+      reputation.score >= 20 ? "bg-amber-500/10 text-amber-500 border-amber-500/20" :
+      "bg-slate-500/10 text-slate-400 border-slate-500/20"
+    }`} title={`Reputation Score: ${reputation.score}/100`}>
+      🛡️ {reputation.label} ({reputation.score})
+    </span>
+  );
+}
+
+function BountyAuditTrail({ bountyId }: { bountyId: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [audit, setAudit] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchAudit = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/bounties/${bountyId}/audit`);
+      if (res.ok) {
+        const data = await res.json();
+        setAudit(data.audit || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchAudit();
+    }
+  }, [isOpen]);
+
+  return (
+    <div className="mt-4 border-t border-slate-800/60 pt-3">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between w-full text-slate-400 font-mono text-[10px] hover:text-slate-300 font-bold uppercase transition focus:outline-none"
+      >
+        <span>📋 LỊCH SỬ KIỂM TOÁN (AUDIT TRAIL)</span>
+        <span>{isOpen ? "Thu gọn ▲" : "Chi tiết ▼"}</span>
+      </button>
+
+      {isOpen && (
+        <div className="mt-2 text-left space-y-2 bg-slate-950/60 p-3 rounded-xl border border-slate-850">
+          {loading ? (
+            <div className="text-[10px] font-mono text-slate-500">Đang tải lịch sử kiểm toán...</div>
+          ) : audit.length === 0 ? (
+            <div className="text-[10px] font-mono text-slate-500">Chưa có hoạt động nào được ghi nhận.</div>
+          ) : (
+            <div className="relative pl-3 border-l-2 border-slate-800 space-y-3 py-1">
+              {audit.map((log, index) => (
+                <div key={log.id || index} className="relative text-[10.5px] leading-relaxed">
+                  <div className="absolute -left-[17px] top-1.5 w-2.5 h-2.5 rounded-full bg-indigo-500 border-2 border-slate-950" />
+                  <div className="flex items-center justify-between text-slate-500 font-mono text-[8.5px]">
+                    <span>{log.actorName} ({log.action})</span>
+                    <span>{new Date(log.createdAt).toLocaleString("vi-VN")}</span>
+                  </div>
+                  <div className="text-slate-300 mt-0.5">{log.details}</div>
+                  {log.fromStatus && log.toStatus && (
+                    <div className="text-[9px] font-mono text-pink-400 font-medium mt-0.5">
+                      Trạng thái: {log.fromStatus} ➔ {log.toStatus}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface CoopMarketProps {
   currentUser: User;
@@ -853,7 +952,16 @@ export default function CoopMarket({
                   </div>
 
                   <div>
-                    <span className="text-[10px] text-indigo-400 font-mono block mb-1">🎯 Dự án: {bounty.projectTitle}</span>
+                    <div className="flex items-center flex-wrap gap-1 mb-1.5">
+                      <span className="text-[10px] text-indigo-400 font-mono block">🎯 Dự án: {bounty.projectTitle}</span>
+                      {bounty.assignedTo && (
+                        <>
+                          <span className="text-slate-700 font-mono text-[9px] mx-1.5">•</span>
+                          <span className="text-[9.5px] text-slate-350 font-mono">Thợ săn: {bounty.assignedToName}</span>
+                          <HunterReputation userId={bounty.assignedTo} />
+                        </>
+                      )}
+                    </div>
                     <h3 className="text-base font-bold text-white group-hover:text-indigo-400 transition font-mono tracking-tight">{bounty.title}</h3>
                     <p className="text-slate-400 text-xs mt-2.5 leading-relaxed">{bounty.description}</p>
                     
@@ -919,6 +1027,7 @@ export default function CoopMarket({
                         )}
                       </div>
                     )}
+                    <BountyAuditTrail bountyId={bounty.id} />
                   </div>
 
                   {/* Footer Action of Card */}

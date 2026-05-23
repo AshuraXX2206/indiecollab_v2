@@ -56,7 +56,6 @@ if (!admin.apps.length) {
 
 // 3. Resolve the Firestore database ID
 // If the variable is explicitly set to empty, default, or (default), we want to use the default database (undefined)
-// For indiecollab-944a1 project, we ignore the sandbox database ID to keep using the default database.
 const dbIdFromEnv = process.env.FIREBASE_DATABASE_ID || process.env.VITE_FIREBASE_DATABASE_ID;
 const resolvedDbId = (typeof dbIdFromEnv !== "undefined")
   ? dbIdFromEnv

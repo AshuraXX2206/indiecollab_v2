@@ -5,9 +5,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   collection, query, where, onSnapshot, addDoc, updateDoc,
-  doc, getDocs, serverTimestamp, Timestamp, limit
+  doc, getDocs, serverTimestamp, Timestamp, limit, setDoc
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import * as XLSX from "xlsx";
 import {
   GameJam, JamRegistration, JamTeam, JamVote, UserPoint,
@@ -64,13 +64,33 @@ function progressPercent(start: string, end: string): number {
 }
 
 // ============================================================================
-// AWARD POINTS HELPER
+// AWARD POINTS HELPER (SECURED SERVER-AUTHORITATIVE ROUTE)
 // ============================================================================
-async function awardPoints(userId: string, amount: number, source: UserPoint["source"], sourceId: string, description: string) {
-  await addDoc(collection(db, "user_points"), {
-    userId, amount, source, sourceId, description,
-    createdAt: new Date().toISOString()
-  });
+async function awardPoints(userId: string, amount: number, source: "jam_register" | "jam_vote", sourceId: string, description: string) {
+  try {
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser) {
+      console.warn("No authenticated user session found to award points.");
+      return;
+    }
+    const idToken = await firebaseUser.getIdToken();
+    const res = await fetch("/api/users/award-points", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ source, sourceId, description })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("[AwardPoints] Server returned error:", data.error);
+    } else {
+      console.log("[AwardPoints] Points successfully ledgered via server:", data);
+    }
+  } catch (err) {
+    console.error("[AwardPoints] Failed to call security endpoints for verification:", err);
+  }
 }
 
 // ============================================================================
@@ -739,7 +759,7 @@ function RegisterModal({ jam, currentUser, allUsers, onClose, onRegistered }: Re
       }
 
       if (mode === "solo") {
-        await addDoc(collection(db, "jam_registrations"), {
+        await setDoc(doc(db, "jam_registrations", `${currentUser.id}_${jam.id}`), {
           jamId: jam.id, userId: currentUser.id,
           userName: currentUser.displayName, userAvatar: currentUser.avatarUrl,
           userJobTitle: currentUser.jobTitle,
@@ -762,7 +782,7 @@ function RegisterModal({ jam, currentUser, allUsers, onClose, onRegistered }: Re
           teamName, members: teamMembers, voteCount: 0,
           createdAt: new Date().toISOString()
         });
-        await addDoc(collection(db, "jam_registrations"), {
+        await setDoc(doc(db, "jam_registrations", `${currentUser.id}_${jam.id}`), {
           jamId: jam.id, userId: currentUser.id,
           userName: currentUser.displayName, userAvatar: currentUser.avatarUrl,
           userJobTitle: currentUser.jobTitle,
@@ -1002,7 +1022,7 @@ function JamDetail({ jam, currentUser, allUsers, onBack, onRegister, isRegistere
     if (!currentUser || myVote || votingFor) return;
     setVotingFor(targetId);
     try {
-      await addDoc(collection(db, "jam_votes"), {
+      await setDoc(doc(db, "jam_votes", `${jam.id}_${currentUser.id}`), {
         jamId: jam.id, voterId: currentUser.id,
         targetId, targetType, createdAt: new Date().toISOString()
       });

@@ -1188,13 +1188,34 @@ export default function App() {
   const handleClaimBounty = async (bountyId: string) => {
     if (!currentUser) return;
     try {
+      // 1. Check claim eligibility with Server Endpoint
+      const headers = await getAuthHeaders();
+      const eligibleRes = await fetch(`/api/bounties/${bountyId}/claim-eligible`, { headers });
+      if (eligibleRes.ok) {
+        const checkResult = await eligibleRes.json();
+        if (checkResult && !checkResult.eligible) {
+          showToast("Không đủ điều kiện nhận", checkResult.reason || "Bạn không thể nhận bounty này.", "error");
+          return;
+        }
+      }
+
+      // 2. Perform Atomic Transaction with Lock document
       const bRef = doc(db, "bounties", bountyId);
+      const lockRef = doc(db, "bounties", bountyId, "claim_lock", currentUser.id);
+
       await runTransaction(db, async (transaction) => {
         const snap = await transaction.get(bRef);
-        if (!snap.exists()) throw new Error("Bounty kh?ng t?n t?i.");
+        if (!snap.exists()) throw new Error("Bounty không tồn tại.");
         const data = snap.data() as BountyTask;
-        if (data.status !== "Open") throw new Error("Bounty n?y ?? c? ng??i nh?n tr??c ??.");
-        if (data.reportedById === currentUser.id) throw new Error("B?n kh?ng th? t? nh?n bounty do ch?nh m?nh ??ng.");
+        if (data.status !== "Open") throw new Error("Bounty này đã được nhận bởi người khác.");
+        if (data.reportedById === currentUser.id) throw new Error("Không thể nhận bounty của chính mình.");
+
+        // Write the idempotent claim_lock document
+        transaction.set(lockRef, {
+          claimedAt: new Date().toISOString(),
+          claimerId: currentUser.id
+        });
+
         transaction.set(bRef, {
           ...data,
           status: "Claimed" as const,
@@ -1203,9 +1224,27 @@ export default function App() {
           claimedAt: new Date().toISOString()
         });
       });
+
+      // 3. Write Bounty Audit Trail on the server
+      try {
+        await fetch(`/api/bounties/${bountyId}/audit`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: "bounty_claim",
+            fromStatus: "Open",
+            toStatus: "Claimed",
+            details: `Thợ săn "${currentUser.displayName}" đã nhận bounty.`
+          })
+        });
+      } catch (auditErr) {
+        console.warn("[Audit] Failed to log bounty claim on the server:", auditErr);
+      }
+
+      showToast("Nhận Bounty thành công", "Bạn đã nhận Bounty này thành công. Hãy bắt đầu giải quyết lỗi!", "success");
     } catch (err: any) {
       console.error(err);
-      showToast("L?i nh?n Bounty", err.message || "Kh?ng th? nh?n Bounty.", "error");
+      showToast("Lỗi nhận Bounty", err.message || "Không thể nhận Bounty.", "error");
     }
   };
 
@@ -1215,10 +1254,10 @@ export default function App() {
       const bRef = doc(db, "bounties", bountyId);
       await runTransaction(db, async (transaction) => {
         const snap = await transaction.get(bRef);
-        if (!snap.exists()) throw new Error("Bounty kh?ng t?n t?i.");
+        if (!snap.exists()) throw new Error("Bounty không tồn tại.");
         const data = snap.data() as BountyTask;
-        if (data.assignedTo !== currentUser.id) throw new Error("Ch? ng??i ?? nh?n bounty m?i c? quy?n g?i nghi?m thu.");
-        if (data.status !== "Claimed") throw new Error("Ch? bounty ?ang ???c nh?n m?i c? th? g?i nghi?m thu.");
+        if (data.assignedTo !== currentUser.id) throw new Error("Chỉ người đã nhận bounty mới có quyền gửi nghiệm thu.");
+        if (data.status !== "Claimed") throw new Error("Chỉ bounty đang được nhận mới có thể gửi nghiệm thu.");
         transaction.set(bRef, {
           ...data,
           status: "InReview" as const,
@@ -1228,10 +1267,28 @@ export default function App() {
           rejectionReason: ""
         });
       });
-      showToast("B?o c?o th?nh c?ng", "Gi?i ph?p ?? ???c g?i v? ?ang ch? nghi?m thu.", "success");
+
+      // Write bounty audit log
+      try {
+        const headers = await getAuthHeaders();
+        await fetch(`/api/bounties/${bountyId}/audit`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: "bounty_review_submit",
+            fromStatus: "Claimed",
+            toStatus: "InReview",
+            details: `Thợ săn gửi báo cáo nghiệm thu với PR: ${githubPrUrl}`
+          })
+        });
+      } catch (auditErr) {
+        console.warn("[Audit] Failed to log bounty review submission:", auditErr);
+      }
+
+      showToast("Báo cáo thành công", "Giải pháp đã được gửi và đang chờ nghiệm thu.", "success");
     } catch (err: any) {
       console.error(err);
-      showToast("L?i g?i b?o c?o", err.message || "Kh?ng th? g?i b?o c?o s?a l?i.", "error");
+      showToast("Lỗi gửi báo cáo", err.message || "Không thể gửi báo cáo sửa lỗi.", "error");
     }
   };
 
@@ -1241,11 +1298,11 @@ export default function App() {
       const bRef = doc(db, "bounties", bountyId);
       await runTransaction(db, async (transaction) => {
         const snap = await transaction.get(bRef);
-        if (!snap.exists()) throw new Error("Bounty kh?ng t?n t?i.");
+        if (!snap.exists()) throw new Error("Bounty không tồn tại.");
         const data = snap.data() as BountyTask;
         const isOwner = data.reportedById === currentUser.id || projects.some(p => p.id === data.projectId && p.ownerId === currentUser.id);
-        if (!isOwner) throw new Error("Ch? ch? bounty ho?c ch? d? ?n m?i c? quy?n duy?t nghi?m thu.");
-        if (data.status !== "InReview" || !data.githubPrUrl || !data.solutionNotes) throw new Error("Ch? b?o c?o ?ang ch? nghi?m thu m?i ???c duy?t.");
+        if (!isOwner) throw new Error("Chỉ chủ bounty hoặc chủ dự án mới có quyền duyệt nghiệm thu.");
+        if (data.status !== "InReview" || !data.githubPrUrl || !data.solutionNotes) throw new Error("Chỉ báo cáo đang chờ nghiệm thu mới được duyệt.");
         transaction.set(bRef, {
           ...data,
           status: "Solved" as const,
@@ -1254,10 +1311,28 @@ export default function App() {
           solvedByName: data.assignedToName
         });
       });
-      showToast("S?a l?i th?nh c?ng", "L?i ?? ???c x?c th?c. Ti?n th??ng ?? ???c gi?i ng?n.", "success");
+
+      // Write bounty audit log
+      try {
+        const headers = await getAuthHeaders();
+        await fetch(`/api/bounties/${bountyId}/audit`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: "bounty_solved",
+            fromStatus: "InReview",
+            toStatus: "Solved",
+            details: `Chủ dự án "${currentUser.displayName}" duyệt giải ngân tiền thưởng.`
+          })
+        });
+      } catch (auditErr) {
+        console.warn("[Audit] Failed to log bounty solution:", auditErr);
+      }
+
+      showToast("Sửa lỗi thành công", "Lỗi đã được xác thực. Tiền thưởng đã được giải ngân.", "success");
     } catch (err: any) {
       console.error(err);
-      showToast("L?i ho?n t?t", err.message || "Kh?ng th? ho?n t?t bounty.", "error");
+      showToast("Lỗi hoàn tất", err.message || "Không thể hoàn tất bounty.", "error");
     }
   };
 
@@ -1267,11 +1342,11 @@ export default function App() {
       const bRef = doc(db, "bounties", bountyId);
       await runTransaction(db, async (transaction) => {
         const snap = await transaction.get(bRef);
-        if (!snap.exists()) throw new Error("Bounty kh?ng t?n t?i.");
+        if (!snap.exists()) throw new Error("Bounty không tồn tại.");
         const data = snap.data() as BountyTask;
         const isOwner = data.reportedById === currentUser.id || projects.some(p => p.id === data.projectId && p.ownerId === currentUser.id);
-        if (!isOwner) throw new Error("Ch? ch? bounty ho?c ch? d? ?n m?i c? quy?n t? ch?i nghi?m thu.");
-        if (data.status !== "InReview") throw new Error("Ch? b?o c?o ?ang ch? nghi?m thu m?i ???c t? ch?i.");
+        if (!isOwner) throw new Error("Chỉ chủ bounty hoặc chủ dự án mới có quyền từ chối nghiệm thu.");
+        if (data.status !== "InReview") throw new Error("Chỉ báo cáo đang chờ nghiệm thu mới được từ chối.");
         transaction.set(bRef, {
           ...data,
           status: "Claimed" as const,
@@ -1279,10 +1354,28 @@ export default function App() {
           rejectedAt: new Date().toISOString()
         });
       });
-      showToast("?? tr? l?i", "B?o c?o ?? b? tr? l?i ?? l?m l?i.", "warning");
+
+      // Write bounty audit log
+      try {
+        const headers = await getAuthHeaders();
+        await fetch(`/api/bounties/${bountyId}/audit`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: "bounty_rejected",
+            fromStatus: "InReview",
+            toStatus: "Claimed",
+            details: `Chủ dự án từ chối báo cáo sửa lỗi và yêu cầu tối ưu thêm.`
+          })
+        });
+      } catch (auditErr) {
+        console.warn("[Audit] Failed to log bounty rejection:", auditErr);
+      }
+
+      showToast("Đã trả lại", "Báo cáo đã bị trả lại để làm lại.", "warning");
     } catch (err: any) {
       console.error(err);
-      showToast("L?i ph?n h?i", err.message || "Kh?ng th? g?i ph?n h?i nghi?m thu.", "error");
+      showToast("Lỗi phản hồi", err.message || "Không thể gửi phản hồi nghiệm thu.", "error");
     }
   };
 
@@ -1292,11 +1385,11 @@ export default function App() {
       const bRef = doc(db, "bounties", bountyId);
       await runTransaction(db, async (transaction) => {
         const snap = await transaction.get(bRef);
-        if (!snap.exists()) throw new Error("Bounty kh?ng t?n t?i.");
+        if (!snap.exists()) throw new Error("Bounty không tồn tại.");
         const data = snap.data() as BountyTask;
         const canArbitrate = data.reportedById === currentUser.id || data.assignedTo === currentUser.id;
         if (!canArbitrate || data.status === "Solved" || !data.githubPrUrl || !data.solutionNotes) {
-          throw new Error("Kh?ng ?? quy?n ho?c tr?ng th?i ?? ?p d?ng ph?n quy?t AI.");
+          throw new Error("Không đủ quyền hoặc trạng thái để áp dụng phán quyết AI.");
         }
         transaction.set(bRef, {
           ...data,
@@ -1313,14 +1406,32 @@ export default function App() {
           })
         });
       });
+
+      // Write bounty audit log
+      try {
+        const headers = await getAuthHeaders();
+        await fetch(`/api/bounties/${bountyId}/audit`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: "bounty_arbitration",
+            fromStatus: "InReview",
+            toStatus: verdict === "APPROVED" ? "Solved" : "Claimed",
+            details: `Trọng tài AI phân xử. Kết luận: ${verdict === "APPROVED" ? "CHẤP THUẬN (APPROVED) - Giải ngân" : "TỪ CHỐI (REJECTED) - Trả về thợ săn"}.`
+          })
+        });
+      } catch (auditErr) {
+        console.warn("[Audit] Failed to log bounty arbitration:", auditErr);
+      }
+
       showToast(
-        "Ph?n quy?t AI",
-        verdict === "APPROVED" ? "Ch?p thu?n v? gi?i ng?n th??ng!" : "B?c b? v? y?u c?u ho?n thi?n l?i.",
+        "Phán quyết AI",
+        verdict === "APPROVED" ? "Chấp thuận và giải ngân thưởng!" : "Bác bỏ và yêu cầu hoàn thiện lại.",
         verdict === "APPROVED" ? "success" : "warning"
       );
     } catch (err: any) {
       console.error("Arbitration verdict update error:", err);
-      showToast("L?i ph?n quy?t AI", err.message || "Kh?ng th? ?p d?ng ph?n quy?t.", "error");
+      showToast("Lỗi phán quyết AI", err.message || "Không thể áp dụng phán quyết.", "error");
     }
   };
 
