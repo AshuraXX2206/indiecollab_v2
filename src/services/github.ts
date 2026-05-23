@@ -322,7 +322,6 @@ export async function submitPRReview(
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/vnd.github.v3+json",
-          "Content-Type": "application/json",
         },
         body: JSON.stringify({ event, body }),
       }
@@ -331,6 +330,79 @@ export async function submitPRReview(
   } catch (err) {
     console.error("Failed to submit review:", err);
     return false;
+  }
+}
+
+// Fetch general repository commits
+export async function fetchRepoCommits(
+  token: string,
+  owner: string,
+  repo: string
+): Promise<GitHubCommit[]> {
+  try {
+    const res = await fetch(
+      `${GITHUB_API_BASE}/repos/${owner}/${repo}/commits?per_page=15`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+    if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to fetch repo commits:", err);
+    return [];
+  }
+}
+
+// Fetch general repository branches
+export async function fetchRepoBranches(
+  token: string,
+  owner: string,
+  repo: string
+): Promise<{ name: string; commit: { sha: string; url: string } }[]> {
+  try {
+    const res = await fetch(
+      `${GITHUB_API_BASE}/repos/${owner}/${repo}/branches?per_page=30`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+    if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to fetch repo branches:", err);
+    return [];
+  }
+}
+
+// Fetch general repository pulls
+export async function fetchRepoPulls(
+  token: string,
+  owner: string,
+  repo: string,
+  state: "open" | "closed" | "all" = "all"
+): Promise<GitHubPR[]> {
+  try {
+    const res = await fetch(
+      `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls?state=${state}&per_page=15`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+    if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to fetch repo pulls:", err);
+    return [];
   }
 }
 

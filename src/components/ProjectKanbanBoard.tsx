@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Project, ProjectTask } from "../types";
+import { Project, ProjectTask, TaskComment } from "../types";
 import { 
   Plus, 
   User, 
@@ -23,20 +23,64 @@ interface ProjectKanbanBoardProps {
   project: Project;
   currentUser: any;
   onUpdateProject: (projectId: string, updatedFields: Partial<Project>) => Promise<void>;
+  isMember?: boolean;
 }
 
-export default function ProjectKanbanBoard({ project, currentUser, onUpdateProject }: ProjectKanbanBoardProps) {
+export default function ProjectKanbanBoard({ project, currentUser, onUpdateProject, isMember }: ProjectKanbanBoardProps) {
   const [showAddTask, setShowAddTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDesc, setNewTaskDesc] = useState("");
   const [newTaskCat, setNewTaskCat] = useState<ProjectTask["category"]>("Code");
+  const [newTaskPriority, setNewTaskPriority] = useState<"low" | "medium" | "high">("medium");
+  const [newTaskDeadline, setNewTaskDeadline] = useState("");
+
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+  const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
+  const [showAllComments, setShowAllComments] = useState<Record<string, boolean>>({});
 
   // Application note state per task
   const [applyingTaskId, setApplyingTaskId] = useState<string | null>(null);
   const [applyNote, setApplyNote] = useState("");
 
   const isOwner = currentUser && currentUser.id === project.ownerId;
+  const checkIsMember = !!(isMember || isOwner);
   const tasks = project.tasks || [];
+
+  const toggleExpandedComments = (taskId: string) => {
+    setExpandedTasks(prev => ({ ...prev, [taskId]: !prev[taskId] }));
+  };
+
+  const handleAddComment = async (taskId: string) => {
+    const text = (commentTexts[taskId] || "").trim();
+    if (!text) return;
+
+    if (!currentUser) {
+      alert("Bạn cần đăng nhập để bình luận!");
+      return;
+    }
+
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    const task = tasks[taskIndex];
+    const newComment: TaskComment = {
+      id: "comment-" + Date.now(),
+      userId: currentUser.id,
+      userName: currentUser.displayName || "User",
+      userAvatar: currentUser.avatarUrl || "",
+      content: text,
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedTasks = [...tasks];
+    updatedTasks[taskIndex] = {
+      ...task,
+      comments: [...(task.comments || []), newComment]
+    };
+
+    await onUpdateProject(project.id, { tasks: updatedTasks });
+    setCommentTexts(prev => ({ ...prev, [taskId]: "" }));
+  };
 
   const getCategoryIcon = (category: ProjectTask["category"]) => {
     switch (category) {
@@ -69,7 +113,10 @@ export default function ProjectKanbanBoard({ project, currentUser, onUpdateProje
       description: newTaskDesc.trim(),
       category: newTaskCat,
       status: "Todo",
-      applicants: []
+      applicants: [],
+      priority: newTaskPriority,
+      deadline: newTaskDeadline || undefined,
+      comments: []
     };
 
     const updatedTasks = [...tasks, newTask];
@@ -78,6 +125,8 @@ export default function ProjectKanbanBoard({ project, currentUser, onUpdateProje
     setNewTaskTitle("");
     setNewTaskDesc("");
     setNewTaskCat("Code");
+    setNewTaskPriority("medium");
+    setNewTaskDeadline("");
     setShowAddTask(false);
   };
 
@@ -170,10 +219,15 @@ export default function ProjectKanbanBoard({ project, currentUser, onUpdateProje
     await onUpdateProject(project.id, { tasks: updatedTasks });
   };
 
-  // Helper to filter tasks by status
-  const todoTasks = tasks.filter(t => t.status === "Todo");
-  const inProgressTasks = tasks.filter(t => t.status === "In Progress");
-  const completedTasks = tasks.filter(t => t.status === "Completed");
+  // Helper to filter and sort tasks by status & priority
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  const sortedTasks = [...tasks].sort((a, b) =>
+    (priorityOrder[a.priority ?? "medium"]) - (priorityOrder[b.priority ?? "medium"])
+  );
+
+  const todoTasks = sortedTasks.filter(t => t.status === "Todo");
+  const inProgressTasks = sortedTasks.filter(t => t.status === "In Progress");
+  const completedTasks = sortedTasks.filter(t => t.status === "Completed");
 
   const renderTaskCard = (task: ProjectTask) => {
     const hasApplied = currentUser && task.applicants?.some(a => a.userId === currentUser.id);
@@ -201,10 +255,58 @@ export default function ProjectKanbanBoard({ project, currentUser, onUpdateProje
         </div>
 
         <div>
-          <h4 className="text-xs font-bold text-slate-100 leading-snug">{task.title}</h4>
+          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+            <h4 className="text-xs font-bold text-slate-100 leading-snug flex-1">{task.title}</h4>
+            <button
+              type="button"
+              onClick={() => toggleExpandedComments(task.id)}
+              className="inline-flex items-center gap-1 rounded bg-slate-900 border border-slate-800 px-2 py-0.5 text-[10px] text-slate-400 font-bold font-mono transition cursor-pointer"
+              title="Xem thảo luận"
+            >
+              💬 {task.comments?.length || 0}
+            </button>
+          </div>
           {task.description && (
             <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{task.description}</p>
           )}
+        </div>
+
+        {/* Priority & Deadline Badge Section */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Priority badge */}
+          {(() => {
+            const priority = task.priority || "medium";
+            let colorClasses = "bg-slate-800 text-slate-350 border-slate-700";
+            let label = "Trung bình";
+            if (priority === "high") {
+              colorClasses = "bg-rose-500/10 text-rose-400 border-rose-500/20";
+              label = "Cao";
+            } else if (priority === "low") {
+              colorClasses = "bg-slate-500/10 text-slate-405 border-slate-500/20";
+              label = "Thấp";
+            }
+            return (
+              <span className={`px-2 py-0.5 rounded border text-[9px] font-semibold tracking-wider font-mono uppercase ${colorClasses}`}>
+                {label}
+              </span>
+            );
+          })()}
+
+          {/* Deadline */}
+          {task.deadline && (() => {
+            const isCompleted = task.status === "Completed";
+            const isOverdue = !isCompleted && new Date(task.deadline!) < new Date();
+            const dateStr = new Date(task.deadline!).toLocaleDateString("vi-VN", {
+              year: "numeric",
+              month: "short",
+              day: "numeric"
+            });
+            return (
+              <span className={`inline-flex items-center gap-1 text-[9.5px] font-mono leading-none ${isOverdue ? "text-rose-500 font-semibold" : "text-slate-400"}`}>
+                <Clock className="h-3 w-3" /> {dateStr}
+              </span>
+            );
+          })()}
         </div>
 
         {/* Assignment info */}
@@ -329,6 +431,101 @@ export default function ProjectKanbanBoard({ project, currentUser, onUpdateProje
             </div>
           </div>
         )}
+
+        {/* Comments Section */}
+        {expandedTasks[task.id] && (
+          <div className="mt-3 border-t border-slate-900 pt-3 space-y-2.5 text-left">
+            <div className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider font-mono flex items-center justify-between">
+              <span>Bình luận ({task.comments?.length || 0})</span>
+              <button
+                type="button"
+                onClick={() => toggleExpandedComments(task.id)}
+                className="text-[9px] text-slate-500 hover:text-slate-350 cursor-pointer"
+              >
+                Thu gọn ✕
+              </button>
+            </div>
+
+            {/* List of comments */}
+            {task.comments && task.comments.length > 0 ? (
+              <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                {(() => {
+                  const sortedComments = [...task.comments].sort(
+                    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                  );
+                  const showAll = showAllComments[task.id];
+                  const displayComments = showAll ? sortedComments : sortedComments.slice(-3);
+
+                  return (
+                    <>
+                      {sortedComments.length > 3 && !showAll && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllComments(prev => ({ ...prev, [task.id]: true }))}
+                          className="w-full text-center text-[9px] text-indigo-400 hover:underline font-bold cursor-pointer font-sans mb-1"
+                        >
+                          Xem thêm {sortedComments.length - 3} bình luận khác...
+                        </button>
+                      )}
+
+                      {displayComments.map((comment) => (
+                        <div key={comment.id} className="flex gap-2 items-start text-xs rounded bg-slate-900/40 p-2 border border-slate-900/60">
+                          {comment.userAvatar ? (
+                            <img src={comment.userAvatar} alt={comment.userName} className="h-5 w-5 rounded-full object-cover" />
+                          ) : (
+                            <div className="h-5 w-5 rounded-full bg-indigo-950 flex items-center justify-center text-[9px] text-indigo-300 font-bold border border-indigo-900">
+                              {comment.userName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0 space-y-0.5">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-bold text-slate-350 text-[10px] truncate">{comment.userName}</span>
+                              <span className="text-[8.5px] text-slate-500 font-mono">
+                                {new Date(comment.createdAt).toLocaleDateString("vi-VN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit"
+                                })}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 break-words leading-relaxed">{comment.content}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
+              </div>
+            ) : (
+              <p className="text-[10px] text-slate-500 italic pl-1 leading-normal">Chưa có bình luận nào cho nhiệm vụ này.</p>
+            )}
+
+            {/* Input comment */}
+            {checkIsMember && (
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  placeholder="Nhập ý kiến bình luận..."
+                  value={commentTexts[task.id] || ""}
+                  onChange={(e) => setCommentTexts(prev => ({ ...prev, [task.id]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddComment(task.id);
+                    }
+                  }}
+                  className="flex-1 rounded-xl bg-slate-950 border border-slate-900 text-[10.5px] text-slate-200 px-3 py-1.5 focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => { playClickSound(); handleAddComment(task.id); }}
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] px-3 py-1.5 transition cursor-pointer"
+                >
+                  Gửi
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -386,6 +583,31 @@ export default function ProjectKanbanBoard({ project, currentUser, onUpdateProje
                 <option value="Design">Thiết kế game (Design)</option>
                 <option value="Other">Khác (Other)</option>
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-wider font-mono">Mức độ ưu tiên</label>
+              <select
+                value={newTaskPriority}
+                onChange={(e) => setNewTaskPriority(e.target.value as any)}
+                className="mt-1 w-full rounded bg-slate-900 border border-slate-800 text-xs text-white px-3 py-2 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="low">Thấp (Low)</option>
+                <option value="medium">Trung bình (Medium)</option>
+                <option value="high">Cao (High)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-wider font-mono">Hạn chót (Deadline)</label>
+              <input
+                type="date"
+                value={newTaskDeadline}
+                onChange={(e) => setNewTaskDeadline(e.target.value)}
+                className="mt-1 w-full rounded bg-slate-900 border border-slate-800 text-xs text-white px-3 py-2 focus:outline-none focus:border-indigo-500"
+              />
             </div>
           </div>
 

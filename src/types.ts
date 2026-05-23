@@ -333,6 +333,15 @@ export interface ProjectRecruitment {
   status: "Open" | "Filled";
 }
 
+export interface TaskComment {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface ProjectTask {
   id: string;
   title: string;
@@ -349,6 +358,10 @@ export interface ProjectTask {
     userJobTitle: string;
     note?: string;
   }>;
+  priority?: "low" | "medium" | "high";
+  deadline?: string;
+  comments?: TaskComment[];
+  githubPrUrl?: string;
 }
 
 export interface Project {
@@ -415,6 +428,78 @@ export interface ProjectWorkspace {
   tasks: ProjectTask[];
   files: ProjectWorkspaceFile[];
   createdAt: string;
+  githubRepoUrl?: string;
+  githubLinkedAt?: string;
+  githubLinkedBy?: string;
+  milestones?: WorkspaceMilestone[];
+  pinnedMessageIds?: string[];
+}
+
+export interface WorkspaceChannel {
+  id: string;
+  name: string;
+  type: "text" | "voice" | "announcement";
+  topic?: string;
+  createdBy: string;
+  createdAt: string;
+  lastMessageAt?: string;
+}
+
+export interface ChannelMessage {
+  id: string;
+  channelId: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  content: string;
+  type: "text" | "system" | "pr_link" | "file";
+  metadata?: {
+    prUrl?: string;
+    fileName?: string;
+    fileUrl?: string;
+  };
+  replyToId?: string;
+  reactions?: Record<string, string[]>; // emoji -> [userId]
+  createdAt: string;
+  editedAt?: string;
+}
+
+export interface WorkspaceVoiceParticipant {
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  joinedAt: string;
+  muted: boolean;
+  deafened: boolean;
+}
+
+export interface WorkspaceVoiceRoom {
+  id: string; // "{workspaceId}_{channelId}"
+  workspaceId: string;
+  channelId: string;
+  participants: WorkspaceVoiceParticipant[];
+  createdAt: string;
+}
+
+export interface WorkspaceMilestone {
+  id: string;
+  title: string;
+  description?: string;
+  deadline: string;
+  status: "open" | "closed";
+  taskIds: string[];
+  goalIds: string[];
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface WorkspacePresence {
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  status: "online" | "away" | "busy";
+  currentTab: string; // "kanban" | "goals" | "github" | "channel_id" | ...
+  lastSeen: string;
 }
 
 export interface WorkspaceMessage {

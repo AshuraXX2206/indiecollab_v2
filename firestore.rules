@@ -228,7 +228,7 @@ service cloud.firestore {
             && request.resource.data.id == resource.data.id
             && request.resource.data.memberIds == resource.data.memberIds
             && request.resource.data.memberProfiles == resource.data.memberProfiles
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['goals', 'tasks', 'files'])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['goals', 'tasks', 'files', 'milestones', 'pinnedMessageIds', 'githubRepoUrl', 'githubLinkedAt', 'githubLinkedBy'])
           )
           ||
           (
@@ -254,6 +254,40 @@ service cloud.firestore {
           && request.resource.data.content.size() <= 2000;
         allow update: if false;
         allow delete: if isWorkspaceMember(projectId) && resource.data.senderId == uid();
+      }
+
+      match /channels/{channelId} {
+        allow read: if isWorkspaceMember(projectId);
+        allow create: if isWorkspaceMember(projectId)
+          && request.resource.data.id == channelId;
+        allow update: if isWorkspaceMember(projectId);
+        allow delete: if isWorkspaceMember(projectId);
+
+        match /messages/{msgId} {
+          allow read: if isWorkspaceMember(projectId);
+          allow create: if isWorkspaceMember(projectId)
+            && request.resource.data.id == msgId
+            && request.resource.data.senderId == uid();
+          allow update: if isWorkspaceMember(projectId)
+            && resource.data.senderId == uid();
+          allow delete: if isWorkspaceMember(projectId)
+            && resource.data.senderId == uid();
+        }
+      }
+
+      match /presence/{userId} {
+        allow read: if isWorkspaceMember(projectId);
+        allow write: if signedIn() && uid() == userId && isWorkspaceMember(projectId);
+      }
+
+      match /voice_rooms/{channelId} {
+        allow read: if isWorkspaceMember(projectId);
+        allow write: if isWorkspaceMember(projectId);
+
+        match /participants/{participantId} {
+          allow read: if isWorkspaceMember(projectId);
+          allow write: if signedIn() && isWorkspaceMember(projectId);
+        }
       }
     }
 
