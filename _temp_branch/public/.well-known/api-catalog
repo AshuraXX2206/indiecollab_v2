@@ -1,0 +1,13 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://indiecollab.onrender.com/",
+      "service-doc": [
+        { "href": "https://indiecollab.onrender.com/docs", "type": "text/html" }
+      ],
+      "status": [
+        { "href": "https://indiecollab.onrender.com/" }
+      ]
+    }
+  ]
+}

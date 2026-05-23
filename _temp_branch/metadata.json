@@ -1,0 +1,6 @@
+{
+  "name": "IndieCollab",
+  "description": "AI-Powered Game Dev Collaboration Platform for Indie Developers and Artists.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

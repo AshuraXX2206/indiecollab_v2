@@ -1,0 +1,28 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Firebase debug logs and local cache
+firebase-debug.log*
+.firebase/
+
+# Local backup / export data (contains actual user accounts and DB records)
+local_users.json
+firebase-data/
+*.local.json
+local-data/
+
+# Credentials
+service-account.json
+credentials.json
+
+# Local runtime databases and ledgers
+.data/
+
+# Firebase CLI binary
+firebase.exe

@@ -1,0 +1,16 @@
+{
+  "serverInfo": {
+    "name": "IndieCollab",
+    "version": "2.0.0",
+    "description": "Collaboration platform for indie game developers"
+  },
+  "transport": {
+    "type": "http",
+    "endpoint": "https://indiecollab.onrender.com/"
+  },
+  "capabilities": {
+    "tools": false,
+    "resources": false,
+    "prompts": false
+  }
+}

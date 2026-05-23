@@ -1,0 +1,24 @@
+# robots.txt — IndieCollab
+# https://indiecollab.onrender.com/robots.txt
+
+User-agent: *
+Allow: /
+
+# Block internal API routes from indexing
+Disallow: /api/
+Disallow: /.data/
+
+# Block Firebase internals
+Disallow: /__/
+
+# Crawl-delay for polite bots
+Crawl-delay: 10
+
+# Sitemap location
+Sitemap: https://indiecollab.onrender.com/sitemap.xml
+
+# Content Signals — AI usage preferences (contentsignals.org)
+# Do not use content for AI model training
+# Allow search indexing
+# Allow AI to use content as input context (e.g. summarization)
+Content-Signal: ai-train=no, search=yes, ai-input=yes

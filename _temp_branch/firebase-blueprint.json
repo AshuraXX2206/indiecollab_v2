@@ -1,0 +1,116 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Indie developer game jam roster card",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The Firebase Auth UID of the developer" },
+        "displayName": { "type": "string", "description": "Lobby display username" },
+        "avatarUrl": { "type": "string", "description": "Direct image reference URL or Base64 compressed image" },
+        "primaryRole": { "type": "string", "description": "Default class of the user" },
+        "skills": { "type": "array", "description": "Roster tags of specialized skills" },
+        "tools": { "type": "array", "description": "Engines or audio/art workspace choices" },
+        "bio": { "type": "string", "description": "Short bio or slogan pitch" },
+        "contactMethods": { "type": "string", "description": "Primary communication handles" },
+        "isAvailable": { "type": "boolean", "description": "Whether currently available to accept invite" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when lobby created" }
+      },
+      "required": ["id", "displayName", "avatarUrl", "primaryRole", "isAvailable", "createdAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Collaboration recruit listing details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "ownerAvatar": { "type": "string" },
+        "title": { "type": "string" },
+        "pitch": { "type": "string" },
+        "description": { "type": "string" },
+        "collabType": { "type": "string" },
+        "engine": { "type": "string" },
+        "lookingForRoles": { "type": "array" },
+        "recruitments": { "type": "array" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerId", "ownerName", "title", "pitch", "description", "collabType", "status", "createdAt"]
+    },
+    "PortfolioItem": {
+      "title": "PortfolioItem",
+      "description": "Individual project showcase art, audio or links",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "mediaType": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "mediaUrl", "mediaType"]
+    },
+    "BountyTask": {
+      "title": "BountyTask",
+      "description": "Bug hunt bounty reports set by team leads",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectTitle": { "type": "string" },
+        "title": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "reward": { "type": "string" },
+        "description": { "type": "string" },
+        "bugDetails": { "type": "string" },
+        "reportedBy": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "projectId", "projectTitle", "title", "difficulty", "reward", "status"]
+    },
+    "ExclusiveAsset": {
+      "title": "ExclusiveAsset",
+      "description": "Exclusive artwork assets for marketplace trade",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "artistId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "mediaType": { "type": "string" },
+        "description": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "price": { "type": "string" },
+        "sold": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "artistId", "artistName", "mediaType", "price", "sold"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Indie developer users profile cards"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Indie collaboration opportunities listing"
+    },
+    "/portfolios/{portfolioId}": {
+      "schema": "PortfolioItem",
+      "description": "Individual asset pieces from users"
+    },
+    "/bounties/{bountyId}": {
+      "schema": "BountyTask",
+      "description": "Open bug squash bounty hunt list"
+    },
+    "/exclusive_assets/{assetId}": {
+      "schema": "ExclusiveAsset",
+      "description": "Exclusive digital assets and art trades"
+    }
+  }
+}

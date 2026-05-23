@@ -1,0 +1,29 @@
+{
+  "$schema": "https://agentskills.io/schemas/index.json",
+  "skills": [
+    {
+      "name": "Project Collaboration",
+      "type": "skill-md",
+      "description": "Post and discover indie game projects seeking collaborators",
+      "url": "https://indiecollab.onrender.com/"
+    },
+    {
+      "name": "Talent Matching",
+      "type": "skill-md",
+      "description": "Find and match with indie game developers by skill, role, and engine expertise",
+      "url": "https://indiecollab.onrender.com/"
+    },
+    {
+      "name": "Game Jam",
+      "type": "skill-md",
+      "description": "Organize and participate in game jam competitions with voting and leaderboards",
+      "url": "https://indiecollab.onrender.com/"
+    },
+    {
+      "name": "Bug Bounty",
+      "type": "skill-md",
+      "description": "Report and resolve bugs in indie game projects for XP rewards",
+      "url": "https://indiecollab.onrender.com/"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "IndieCollab",
+  "version": "2.0.0",
+  "description": "IndieCollab is a collaboration platform for indie game developers. It connects developers, pixel artists, sound designers and creators to find teammates, post projects, hunt bug bounties, and ship games together.",
+  "url": "https://indiecollab.onrender.com/",
+  "supportedInterfaces": [
+    {
+      "type": "web",
+      "url": "https://indiecollab.onrender.com/",
+      "transport": "HTTP"
+    }
+  ],
+  "capabilities": {
+    "authentication": ["Firebase Anonymous", "Google OAuth", "GitHub OAuth", "Email/Password"],
+    "features": ["project-listing", "talent-matching", "game-jams", "bug-bounties", "studios"]
+  },
+  "skills": [
+    {
+      "id": "project-collab",
+      "name": "Project Collaboration",
+      "description": "Post and discover indie game projects seeking collaborators"
+    },
+    {
+      "id": "talent-hub",
+      "name": "Talent Hub",
+      "description": "Find and match with indie game developers by skill and role"
+    },
+    {
+      "id": "game-jam",
+      "name": "Game Jam",
+      "description": "Organize and participate in game jam competitions"
+    },
+    {
+      "id": "bug-bounty",
+      "name": "Bug Bounty",
+      "description": "Report and resolve bugs in indie game projects for rewards"
+    }
+  ],
+  "contact": {
+    "url": "https://indiecollab.onrender.com/"
+  }
+}
